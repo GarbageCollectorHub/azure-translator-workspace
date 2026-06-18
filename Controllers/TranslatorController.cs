@@ -1,0 +1,219 @@
+using TranslatorAzure.Models.Rest;
+using TranslatorAzure.Models.Translator;
+using TranslatorAzure.Services.Translator;
+using Microsoft.AspNetCore.Mvc;
+
+namespace TranslatorAzure.Controllers
+{
+    public class TranslatorController : Controller
+    {
+        private const string TranslationUnavailableMessage =
+            "Translation is temporarily unavailable. Please try again.";
+
+        private readonly ITranslatorService _translatorService;
+        private readonly ILogger<TranslatorController> _logger;
+
+        public TranslatorController(
+            ITranslatorService translatorService,
+            ILogger<TranslatorController> logger)
+        {
+            _translatorService = translatorService;
+            _logger = logger;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Index(TranslatorFormModel formModel, CancellationToken cancellationToken)
+        {
+            NormalizeForm(formModel);
+
+            var viewModel = new TranslatorViewModel
+            {
+                FormModel = formModel,
+                TranslatorLanguages = await _translatorService.GetLanguagesAsync(cancellationToken)
+            };
+
+            if (IsSubmitted(formModel))
+            {
+                try
+                {
+                    if (formModel.Button == "switch")
+                    {
+                        await SwitchTranslationAsync(formModel, viewModel, cancellationToken);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(formModel.Text))
+                    {
+                        await TranslateFormAsync(formModel, viewModel, cancellationToken);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Azure Translator failed to translate text.");
+                    viewModel.ErrorMessage = TranslationUnavailableMessage;
+                }
+            }
+
+            return View(viewModel);
+        }
+
+        [HttpGet]
+        public async Task<JsonResult> Translate(TranslatorFormModel formModel, CancellationToken cancellationToken)
+        {
+            NormalizeForm(formModel);
+
+            try
+            {
+                var result = await _translatorService.TranslateAsync(formModel, cancellationToken);
+
+                if (string.IsNullOrWhiteSpace(result.TranslatedText))
+                {
+                    return Json(CreateTranslationErrorResponse());
+                }
+
+                return Json(new RestResponse
+                {
+                    Meta = new()
+                    {
+                        Service = "TranslatorAzure",
+                        Action = "Text Translation",
+                        Time = DateTime.Now.Ticks,
+                        DataType = "translation",
+                        Params = new()
+                        {
+                            { "lang-from", formModel.LanguageFrom },
+                            { "lang-to", formModel.LanguageTo }
+                        }
+                    },
+                    Data = new
+                    {
+                        text = result.TranslatedText,
+                        transliteration = result.TransliterationTo,
+                        detectedLanguage = result.DetectedLanguage,
+                        detectionScore = result.DetectionScore
+                    }
+                });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Azure Translator API request failed.");
+                return Json(CreateTranslationErrorResponse());
+            }
+        }
+
+        private static void NormalizeForm(TranslatorFormModel formModel)
+        {
+            formModel.LanguageFrom = string.IsNullOrWhiteSpace(formModel.LanguageFrom)
+                ? TranslatorFormModel.AutoDetectLanguageCode
+                : formModel.LanguageFrom;
+
+            formModel.LanguageTo = string.IsNullOrWhiteSpace(formModel.LanguageTo)
+                ? "uk"
+                : formModel.LanguageTo;
+
+            formModel.Text ??= string.Empty;
+        }
+
+        private static bool IsSubmitted(TranslatorFormModel formModel)
+        {
+            return formModel.Button is "translate" or "switch";
+        }
+
+        private async Task TranslateFormAsync(
+            TranslatorFormModel formModel,
+            TranslatorViewModel viewModel,
+            CancellationToken cancellationToken)
+        {
+            var result = await _translatorService.TranslateAsync(formModel, cancellationToken);
+            ApplyTranslationResult(formModel, viewModel, result);
+        }
+
+        private async Task SwitchTranslationAsync(
+            TranslatorFormModel formModel,
+            TranslatorViewModel viewModel,
+            CancellationToken cancellationToken)
+        {
+            var originalFrom = formModel.LanguageFrom;
+            var originalTo = formModel.LanguageTo;
+            var originalText = formModel.Text ?? string.Empty;
+            var translatedText = formModel.Translation;
+            TranslatorResult? result = null;
+
+            if (string.IsNullOrWhiteSpace(translatedText) && !string.IsNullOrWhiteSpace(originalText))
+            {
+                result = await _translatorService.TranslateAsync(formModel, cancellationToken);
+                translatedText = result.TranslatedText;
+            }
+
+            if (string.IsNullOrWhiteSpace(translatedText))
+            {
+                viewModel.ErrorMessage = TranslationUnavailableMessage;
+                return;
+            }
+
+            if (originalFrom != TranslatorFormModel.AutoDetectLanguageCode || !string.IsNullOrWhiteSpace(translatedText))
+            {
+                formModel.LanguageFrom = originalTo;
+                formModel.LanguageTo = ResolveLanguageAfterAutoDetect(originalFrom, formModel.DetectedLanguage, result?.DetectedLanguage);
+            }
+
+            if (!string.IsNullOrWhiteSpace(translatedText))
+            {
+                formModel.Text = translatedText;
+                formModel.Translation = originalText;
+                viewModel.Translation = originalText;
+                viewModel.TransliterationFrom = result?.TransliterationTo;
+                viewModel.TransliterationTo = result?.TransliterationFrom;
+            }
+        }
+
+        private static void ApplyTranslationResult(
+            TranslatorFormModel formModel,
+            TranslatorViewModel viewModel,
+            TranslatorResult result)
+        {
+            if (string.IsNullOrWhiteSpace(result.TranslatedText))
+            {
+                viewModel.ErrorMessage = TranslationUnavailableMessage;
+                return;
+            }
+
+            formModel.DetectedLanguage = result.DetectedLanguage;
+            viewModel.Translation = result.TranslatedText;
+            viewModel.TransliterationFrom = result.TransliterationFrom;
+            viewModel.TransliterationTo = result.TransliterationTo;
+            viewModel.DetectedLanguage = result.DetectedLanguage;
+            viewModel.DetectionScore = result.DetectionScore;
+        }
+
+        private static string ResolveLanguageAfterAutoDetect(params string?[] languageCodes)
+        {
+            return languageCodes.FirstOrDefault(code =>
+                    !string.IsNullOrWhiteSpace(code) &&
+                    code != TranslatorFormModel.AutoDetectLanguageCode)
+                ?? "en";
+        }
+
+        private static RestResponse CreateTranslationErrorResponse()
+        {
+            return new RestResponse
+            {
+                Status = new()
+                {
+                    IsOk = false,
+                    Code = 500,
+                    Phrase = TranslationUnavailableMessage
+                },
+                Meta = new()
+                {
+                    Service = "TranslatorAzure",
+                    Action = "Text Translation",
+                    Time = DateTime.Now.Ticks,
+                    DataType = "error"
+                },
+                Data = new
+                {
+                    message = TranslationUnavailableMessage
+                }
+            };
+        }
+    }
+}

@@ -1,0 +1,10 @@
+{
+  "translator": {
+    "key": "<your-translator-key>",
+    "endpoint": "https://api.cognitive.microsofttranslator.com",
+    "location": "<YOUR-RESOURCE-LOCATION>",
+    "route": "/translate?api-version=3.0",
+    "routeTransliterate": "/transliterate?api-version=3.0",
+    "languagesUrl": "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0"
+  }
+}

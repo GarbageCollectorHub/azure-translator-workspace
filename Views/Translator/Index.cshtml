@@ -1,0 +1,404 @@
+@using TranslatorAzure.Models.Translator
+@model TranslatorAzure.Models.Translator.TranslatorViewModel
+
+@{
+    ViewData["Title"] = "Azure Translator";
+
+    const string autoCode = TranslatorFormModel.AutoDetectLanguageCode;
+    string selectedFrom = Model.FormModel?.LanguageFrom ?? autoCode;
+    string selectedTo = Model.FormModel?.LanguageTo ?? "uk";
+    string sourceText = string.IsNullOrWhiteSpace(Model.FormModel?.Text)
+        ? "Hello, how are you today?"
+        : Model.FormModel.Text;
+
+    var sourceLanguageInfo = selectedFrom == autoCode
+        ? null
+        : Model.TranslatorLanguages.translation.GetValueOrDefault(selectedFrom);
+    var targetLanguageInfo = Model.TranslatorLanguages.translation.GetValueOrDefault(selectedTo);
+
+    string textDirectionFrom = sourceLanguageInfo?.dir ?? "ltr";
+    string textDirectionTo = targetLanguageInfo?.dir ?? "ltr";
+
+    string LanguageLabel(KeyValuePair<string, LanguageInfo> language)
+    {
+        var info = language.Value;
+        return info.name == info.nativeName
+            ? info.name
+            : $"{info.name} ({info.nativeName})";
+    }
+}
+
+<section class="translator-shell">
+    <h1 class="visually-hidden">Azure Translator</h1>
+
+    <form id="translator-form" class="translator-card" method="get" asp-controller="Translator" asp-action="Index">
+        <input type="hidden" id="submit-action" name="btn" value="translate" />
+        <input type="hidden" name="detected-lang" value="@Model.DetectedLanguage" />
+        <div class="translator-grid">
+            <div class="translator-pane">
+                <label class="form-label" for="source-language">From</label>
+                <select id="source-language" name="lang-from" class="form-select" aria-label="Source language">
+                    <option value="@autoCode" selected="@(selectedFrom == autoCode ? "selected" : null)">Auto-detect</option>
+                    @foreach (var lang in Model.TranslatorLanguages.translation)
+                    {
+                        var textDirectionClass = lang.Value.dir == "ltr" ? "ltr-text" : "rtl-text";
+
+                        <option
+                            value="@lang.Key"
+                            class="@textDirectionClass"
+                            selected="@(lang.Key == selectedFrom ? "selected" : null)">
+                            @LanguageLabel(lang)
+                        </option>
+                    }
+                </select>
+
+                <textarea
+                    id="source-text"
+                    name="text"
+                    class="form-control translator-textarea @(textDirectionFrom == "ltr" ? "ltr-text" : "rtl-text")"
+                    rows="7">@sourceText</textarea>
+
+                <div class="translator-meta">
+                    @if (Model.DetectedLanguage != null)
+                    {
+                        <span>
+                            Detected:
+                            @Model.DetectedLanguage
+                            @if (Model.DetectionScore != null)
+                            {
+                                <span>(@Math.Round(Model.DetectionScore.Value * 100)%)</span>
+                            }
+                        </span>
+                    }
+                    @if (Model.TransliterationFrom != null)
+                    {
+                        <span title="Transliteration">[@Model.TransliterationFrom]</span>
+                    }
+                </div>
+            </div>
+
+            <div class="translator-actions">
+                <button
+                    class="btn btn-outline-secondary icon-button"
+                    type="submit"
+                    data-submit-action="switch"
+                    title="Switch languages"
+                    aria-label="Switch languages">
+                    <i class="bi bi-arrow-left-right"></i>
+                </button>
+                <button
+                    id="translate-button"
+                    class="btn btn-primary icon-button"
+                    type="submit"
+                    data-submit-action="translate"
+                    title="Translate"
+                    aria-label="Translate">
+                    <i class="bi bi-translate"></i>
+                </button>
+            </div>
+
+            <div class="translator-pane">
+                <label class="form-label" for="target-language">To</label>
+                <select id="target-language" name="lang-to" class="form-select" aria-label="Target language">
+                    @foreach (var lang in Model.TranslatorLanguages.translation)
+                    {
+                        var textDirectionClass = lang.Value.dir == "ltr" ? "ltr-text" : "rtl-text";
+
+                        <option
+                            value="@lang.Key"
+                            class="@textDirectionClass"
+                            selected="@(lang.Key == selectedTo ? "selected" : null)">
+                            @LanguageLabel(lang)
+                        </option>
+                    }
+                </select>
+
+                <div class="translation-output">
+                    <textarea
+                        id="translated-text"
+                        name="translation"
+                        class="form-control translator-textarea @(textDirectionTo == "ltr" ? "ltr-text" : "rtl-text")"
+                        rows="7"
+                        placeholder="Translation will appear here"
+                        readonly>@Model.Translation</textarea>
+                    <button
+                        id="copy-translation"
+                        class="btn btn-outline-secondary icon-button copy-button"
+                        type="button"
+                        title="Copy translation"
+                        aria-label="Copy translation">
+                        <i class="bi bi-copy"></i>
+                    </button>
+                </div>
+
+                <div class="translator-meta">
+                    @if (Model.ErrorMessage != null)
+                    {
+                        <span class="translator-error">
+                            <i class="bi bi-exclamation-circle"></i>
+                            @Model.ErrorMessage
+                        </span>
+                    }
+                    @if (Model.TransliterationTo != null)
+                    {
+                        <span title="Transliteration">[@Model.TransliterationTo]</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="workspace-grid">
+        <section class="document-panel">
+            <div class="panel-toolbar">
+                <div class="panel-controls">
+                    <h2 class="panel-title">Sample text</h2>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="translate-selected" checked>
+                        <label class="form-check-label" for="translate-selected">Translate selection</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="replace-selected">
+                        <label class="form-check-label" for="replace-selected">Replace selection</label>
+                    </div>
+                    <button id="reset-document" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Reset sample text" aria-label="Reset sample text">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </div>
+                <span id="selection-status" class="selection-status"></span>
+            </div>
+
+            <textarea id="document-text" class="document-textarea" spellcheck="true">Before each release, the team reviews the changelog, checks known issues, and prepares customer-facing notes for support teams in different regions. Clear wording helps local teams explain what changed, what still needs attention, and which steps users should follow next.</textarea>
+        </section>
+
+        <aside class="history-panel" aria-label="Translation history">
+            <div class="history-header">
+                <h2>History</h2>
+                <button id="clear-history" class="btn btn-outline-secondary icon-button" type="button" title="Clear history" aria-label="Clear history">
+                    <i class="bi bi-trash3"></i>
+                </button>
+            </div>
+            <div id="translation-history" class="history-list"></div>
+        </aside>
+    </div>
+</section>
+
+<div class="position-fixed top-0 start-50 translate-middle-x mt-4" style="z-index: 1100">
+    <div id="translation-toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <span class="translate-icon me-2"><i class="bi bi-globe2"></i></span>
+            <strong class="me-auto">Translation</strong>
+            <small class="text-muted" id="toast-time"></small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toast-body"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const historyKey = 'azure-translator-history-v1';
+            const translateEndpoint = '@Url.Action("Translate", "Translator")';
+
+            const form = document.getElementById('translator-form');
+            const submitAction = document.getElementById('submit-action');
+            const translateButton = document.getElementById('translate-button');
+            const sourceLanguage = document.getElementById('source-language');
+            const targetLanguage = document.getElementById('target-language');
+            const documentText = document.getElementById('document-text');
+            const defaultDocumentText = documentText.value;
+            const translateSelected = document.getElementById('translate-selected');
+            const replaceSelected = document.getElementById('replace-selected');
+            const resetDocument = document.getElementById('reset-document');
+            const selectionStatus = document.getElementById('selection-status');
+            const historyList = document.getElementById('translation-history');
+            const clearHistory = document.getElementById('clear-history');
+            const translatedText = document.getElementById('translated-text');
+            const copyTranslation = document.getElementById('copy-translation');
+
+            let selectionTimer = 0;
+            let lastSelectionKey = '';
+
+            const initialInput = @Json.Serialize(Model.FormModel?.Text ?? "");
+            const initialOutput = @Json.Serialize(Model.Translation ?? "");
+
+            function loadHistory() {
+                try {
+                    return JSON.parse(localStorage.getItem(historyKey) || '[]');
+                } catch {
+                    return [];
+                }
+            }
+
+            function saveHistory(items) {
+                localStorage.setItem(historyKey, JSON.stringify(items.slice(0, 20)));
+            }
+
+            function addHistory(input, output, detectedLanguage) {
+                if (!input?.trim() || !output?.trim()) {
+                    return;
+                }
+
+                const item = {
+                    input: input.trim(),
+                    output: output.trim(),
+                    detectedLanguage,
+                    time: new Date().toISOString()
+                };
+
+                const items = loadHistory()
+                    .filter(x => !(x.input === item.input && x.output === item.output));
+
+                items.unshift(item);
+                saveHistory(items);
+                renderHistory();
+            }
+
+            function renderHistory() {
+                const items = loadHistory();
+                historyList.innerHTML = '';
+
+                if (items.length === 0) {
+                    const empty = document.createElement('p');
+                    empty.className = 'history-empty';
+                    empty.textContent = 'No translations yet';
+                    historyList.appendChild(empty);
+                    return;
+                }
+
+                for (const item of items) {
+                    const row = document.createElement('article');
+                    row.className = 'history-item';
+
+                    const input = document.createElement('p');
+                    input.className = 'history-input';
+                    input.textContent = item.input;
+
+                    const output = document.createElement('p');
+                    output.className = 'history-output';
+                    output.textContent = item.output;
+
+                    const footer = document.createElement('div');
+                    footer.className = 'history-footer';
+
+                    const time = document.createElement('span');
+                    time.textContent = new Date(item.time).toLocaleString();
+
+                    const copy = document.createElement('button');
+                    copy.className = 'btn btn-sm btn-outline-secondary icon-button';
+                    copy.type = 'button';
+                    copy.title = 'Copy';
+                    copy.setAttribute('aria-label', 'Copy');
+                    copy.innerHTML = '<i class="bi bi-copy"></i>';
+                    copy.addEventListener('click', () => navigator.clipboard?.writeText(item.output));
+
+                    footer.append(time, copy);
+                    row.append(input, output, footer);
+                    historyList.appendChild(row);
+                }
+            }
+
+            function showToast(text) {
+                const toastEl = document.getElementById('translation-toast');
+                document.getElementById('toast-body').textContent = text;
+                document.getElementById('toast-time').textContent = new Date().toLocaleTimeString();
+                bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false }).show();
+            }
+
+            async function translateSelection() {
+                if (!translateSelected.checked || document.activeElement !== documentText) {
+                    return;
+                }
+
+                const start = documentText.selectionStart;
+                const end = documentText.selectionEnd;
+                const selectedText = documentText.value.substring(start, end).trim();
+
+                if (selectedText.length < 2) {
+                    return;
+                }
+
+                const selectionKey = `${start}:${end}:${selectedText}:${sourceLanguage.value}:${targetLanguage.value}:${replaceSelected.checked}`;
+                if (selectionKey === lastSelectionKey) {
+                    return;
+                }
+                lastSelectionKey = selectionKey;
+
+                const params = new URLSearchParams({
+                    'lang-from': sourceLanguage.value,
+                    'lang-to': targetLanguage.value,
+                    text: selectedText
+                });
+
+                selectionStatus.textContent = 'Translating...';
+
+                try {
+                    const response = await fetch(`${translateEndpoint}?${params}`);
+                    const result = await response.json();
+
+                    if (!result.status?.isOk) {
+                        selectionStatus.textContent = result.data?.message || result.status?.phrase || 'Translation unavailable';
+                        return;
+                    }
+
+                    const output = result.data?.text ?? '';
+
+                    if (replaceSelected.checked) {
+                        documentText.setRangeText(output, start, end, 'end');
+                    } else {
+                        showToast(output);
+                    }
+
+                    addHistory(selectedText, output, result.data?.detectedLanguage);
+                    selectionStatus.textContent = '';
+                } catch {
+                    selectionStatus.textContent = 'Translation unavailable';
+                }
+            }
+
+            function scheduleSelectionTranslation() {
+                clearTimeout(selectionTimer);
+                selectionTimer = window.setTimeout(translateSelection, 650);
+            }
+
+            document.querySelectorAll('[data-submit-action]').forEach(button => {
+                button.addEventListener('click', () => {
+                    submitAction.value = button.dataset.submitAction;
+                });
+            });
+
+            form?.addEventListener('submit', event => {
+                submitAction.value = event.submitter?.dataset.submitAction || submitAction.value || 'translate';
+                translateButton.disabled = true;
+                translateButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+            });
+
+            documentText.addEventListener('select', scheduleSelectionTranslation);
+            documentText.addEventListener('keyup', scheduleSelectionTranslation);
+            documentText.addEventListener('mouseup', scheduleSelectionTranslation);
+            resetDocument.addEventListener('click', () => {
+                documentText.value = defaultDocumentText;
+                lastSelectionKey = '';
+                selectionStatus.textContent = '';
+            });
+
+            clearHistory.addEventListener('click', () => {
+                localStorage.removeItem(historyKey);
+                renderHistory();
+            });
+
+            copyTranslation.addEventListener('click', () => {
+                if (translatedText.value.trim()) {
+                    navigator.clipboard?.writeText(translatedText.value);
+                }
+            });
+
+            if (initialInput && initialOutput) {
+                addHistory(initialInput, initialOutput, @Json.Serialize(Model.DetectedLanguage));
+            }
+
+            renderHistory();
+        })();
+    </script>
+}

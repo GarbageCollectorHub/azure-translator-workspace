@@ -1,0 +1,18 @@
+@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<section class="error-page">
+    <h1>Something went wrong</h1>
+    <p>The translator could not complete the request. Please try again.</p>
+
+    @if (Model.ShowRequestId)
+    {
+        <p class="error-request-id">
+            Request ID: <code>@Model.RequestId</code>
+        </p>
+    }
+
+    <a class="btn btn-primary" asp-controller="Translator" asp-action="Index">Back to translator</a>
+</section>
