@@ -96,7 +96,8 @@ body {
 }
 
 .translator-textarea {
-  min-height: clamp(152px, 17vh, 230px);
+  height: clamp(160px, 18vh, 230px);
+  min-height: 160px;
   resize: vertical;
 }
 
@@ -587,28 +588,9 @@ body {
 }
 
 @media (min-width: 901px) and (min-height: 900px) {
-  body {
-    display: flex;
-    flex-direction: column;
-  }
-
-  main[role="main"] {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-  }
-
-  .translator-shell {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-  }
-
   .workspace-grid {
-    height: clamp(480px, calc(100dvh - 450px), 820px);
+    height: clamp(480px, 50dvh, 720px);
     min-height: 0;
-    flex: 1 1 auto;
   }
 
   .document-panel,

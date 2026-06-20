@@ -3,8 +3,15 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Azure secrets/settings
 azuresettings.json
+
+# Visual Studio Azure service dependencies
 Properties/ServiceDependencies/
+
+# Publish credentials / local publish data
+*.PublishSettings
+Properties/PublishProfiles/*.pubxml.user
 
 # User-specific files
 *.rsuser
