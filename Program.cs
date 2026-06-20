@@ -1,3 +1,4 @@
+using TranslatorAzure.Services.FileText;
 using TranslatorAzure.Services.Translator;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,16 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.Configure<TranslatorOptions>(builder.Configuration.GetSection("translator"));
 builder.Services.AddScoped<ITranslatorService, AzureTranslatorService>();
+builder.Services
+    .AddOptions<FileTextImportOptions>()
+    .Bind(builder.Configuration.GetSection(FileTextImportOptions.SectionName))
+    .Validate(options => options.MaxUploadBytes > 0, "The file import size limit must be positive.")
+    .Validate(options => options.MaxUploadBytes <= FileTextImportOptions.DefaultMaxUploadBytes,
+        $"The file import size limit cannot exceed {FileTextImportOptions.DefaultMaxUploadBytes} bytes.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IFileTextExtractor, PlainTextExtractor>();
+builder.Services.AddSingleton<IFileTextExtractor, OpenXmlWordTextExtractor>();
+builder.Services.AddScoped<IFileTextImportService, FileTextImportService>();
 
 var app = builder.Build();
 
@@ -36,5 +47,6 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
+
 
 app.Run();

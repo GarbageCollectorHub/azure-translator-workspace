@@ -1,4 +1,5 @@
 @using TranslatorAzure.Models.Translator
+@inject Microsoft.Extensions.Options.IOptions<TranslatorAzure.Services.FileText.FileTextImportOptions> FileTextOptions
 @model TranslatorAzure.Models.Translator.TranslatorViewModel
 
 @{
@@ -26,12 +27,16 @@
             ? info.name
             : $"{info.name} ({info.nativeName})";
     }
+
+    var maxUploadBytes = FileTextOptions.Value.MaxUploadBytes;
+    var maxUploadSizeLabel = FileTextOptions.Value.MaxUploadSizeLabel;
 }
 
 <section class="translator-shell">
     <h1 class="visually-hidden">Azure Translator</h1>
 
     <form id="translator-form" class="translator-card" method="get" asp-controller="Translator" asp-action="Index">
+        @Html.AntiForgeryToken()
         <input type="hidden" id="submit-action" name="btn" value="translate" />
         <input type="hidden" name="detected-lang" value="@Model.DetectedLanguage" />
         <div class="translator-grid">
@@ -149,10 +154,14 @@
     </form>
 
     <div class="workspace-grid">
-        <section class="document-panel">
+        <section class="document-panel" aria-label="Text workspace">
             <div class="panel-toolbar">
+                <div class="workspace-tabs" role="tablist" aria-label="Workspace type">
+                    <button class="workspace-tab is-active" type="button" role="tab" aria-selected="true" data-workspace-tab="sample">Sample text</button>
+                    <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-tab="file">File text</button>
+                </div>
+
                 <div class="panel-controls">
-                    <h2 class="panel-title">Sample text</h2>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="translate-selected" checked>
                         <label class="form-check-label" for="translate-selected">Translate selection</label>
@@ -161,14 +170,63 @@
                         <input class="form-check-input" type="checkbox" id="replace-selected">
                         <label class="form-check-label" for="replace-selected">Replace selection</label>
                     </div>
-                    <button id="reset-document" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Reset sample text" aria-label="Reset sample text">
+                    <button id="select-all-text" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Select all text in the current section" aria-label="Select all text in the current section">
+                        <i class="bi bi-text-paragraph"></i>
+                    </button>
+                    <button id="undo-replacement" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Undo replacement (Ctrl+Z)" aria-label="Undo replacement" disabled>
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button id="redo-replacement" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Redo replacement (Ctrl+Y)" aria-label="Redo replacement" disabled>
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button id="reset-sample" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Reset sample text" aria-label="Reset sample text">
                         <i class="bi bi-arrow-counterclockwise"></i>
                     </button>
                 </div>
-                <span id="selection-status" class="selection-status"></span>
+                <span id="selection-status" class="selection-status" role="status"></span>
             </div>
 
-            <textarea id="document-text" class="document-textarea" spellcheck="true">Before each release, the team reviews the changelog, checks known issues, and prepares customer-facing notes for support teams in different regions. Clear wording helps local teams explain what changed, what still needs attention, and which steps users should follow next.</textarea>
+            <div id="sample-workspace" class="workspace-content">
+                <textarea id="sample-text" class="document-textarea" spellcheck="true">Before each release, the team reviews the changelog, checks known issues, and prepares customer-facing notes for support teams in different regions. Clear wording helps local teams explain what changed, what still needs attention, and which steps users should follow next.</textarea>
+            </div>
+
+            <div id="file-workspace" class="workspace-content" hidden>
+                <div id="file-upload" class="file-upload">
+                    <label id="file-drop-zone" class="file-drop-zone">
+                        <input id="file-input" class="visually-hidden" type="file" accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                        <span class="file-upload-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
+                        <strong>Choose or drop a text file</strong>
+                        <span>TXT, DOCX - up to @maxUploadSizeLabel</span>
+                    </label>
+                    <div class="file-selection-row">
+                        <span id="file-selection-name" class="file-selection-name" hidden></span>
+                        <button id="import-file" class="btn btn-primary" type="button" disabled>
+                            <i class="bi bi-file-earmark-text me-2"></i>Open text
+                        </button>
+                    </div>
+                </div>
+
+                <div id="file-editor" class="file-editor" hidden>
+                    <div class="file-editor-header">
+                        <span id="imported-file-name" class="imported-file-name"></span>
+                        <div class="file-segment-navigation" aria-label="File section navigation">
+                            <button id="previous-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Previous section" aria-label="Previous section">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+                            <span id="segment-position"></span>
+                            <button id="next-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Next section" aria-label="Next section">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                            <button id="clear-file" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Close imported file" aria-label="Close imported file">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="file-text" class="document-textarea" spellcheck="true"></textarea>
+                </div>
+
+                <p id="file-import-message" class="file-import-message" role="status" hidden></p>
+            </div>
         </section>
 
         <aside class="history-panel" aria-label="Translation history">
@@ -199,26 +257,57 @@
     <script>
         (() => {
             const historyKey = 'azure-translator-history-v1';
+            const historyLimit = 20;
+            const maxSelectionLength = @TranslationRequest.MaxTextLength;
+            const maxUploadBytes = @maxUploadBytes;
+            const maxUploadSizeLabel = '@maxUploadSizeLabel';
             const translateEndpoint = '@Url.Action("Translate", "Translator")';
+            const fileImportEndpoint = '@Url.Action("Import", "FileText")';
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
 
             const form = document.getElementById('translator-form');
             const submitAction = document.getElementById('submit-action');
             const translateButton = document.getElementById('translate-button');
             const sourceLanguage = document.getElementById('source-language');
             const targetLanguage = document.getElementById('target-language');
-            const documentText = document.getElementById('document-text');
-            const defaultDocumentText = documentText.value;
+            const sampleText = document.getElementById('sample-text');
+            const fileText = document.getElementById('file-text');
+            const defaultSampleText = sampleText.value;
             const translateSelected = document.getElementById('translate-selected');
             const replaceSelected = document.getElementById('replace-selected');
-            const resetDocument = document.getElementById('reset-document');
+            const selectAllText = document.getElementById('select-all-text');
+            const undoReplacement = document.getElementById('undo-replacement');
+            const redoReplacement = document.getElementById('redo-replacement');
+            const resetSample = document.getElementById('reset-sample');
             const selectionStatus = document.getElementById('selection-status');
             const historyList = document.getElementById('translation-history');
             const clearHistory = document.getElementById('clear-history');
             const translatedText = document.getElementById('translated-text');
             const copyTranslation = document.getElementById('copy-translation');
+            const fileInput = document.getElementById('file-input');
+            const fileSelectionName = document.getElementById('file-selection-name');
+            const fileDropZone = document.getElementById('file-drop-zone');
+            const importFile = document.getElementById('import-file');
+            const fileUpload = document.getElementById('file-upload');
+            const fileEditor = document.getElementById('file-editor');
+            const fileImportMessage = document.getElementById('file-import-message');
+            const importedFileName = document.getElementById('imported-file-name');
+            const previousSegment = document.getElementById('previous-segment');
+            const nextSegment = document.getElementById('next-segment');
+            const segmentPosition = document.getElementById('segment-position');
+            const clearFile = document.getElementById('clear-file');
 
+            let activeWorkspace = 'sample';
             let selectionTimer = 0;
             let lastSelectionKey = '';
+            let importedSegments = [];
+            let currentSegmentIndex = 0;
+            let selectedFile = null;
+            let fileDropDepth = 0;
+            let isApplyingProgrammaticTextChange = false;
+
+            const replacementHistoryLimit = 20;
+            const replacementHistories = new Map();
 
             const initialInput = @Json.Serialize(Model.FormModel?.Text ?? "");
             const initialOutput = @Json.Serialize(Model.Translation ?? "");
@@ -232,7 +321,7 @@
             }
 
             function saveHistory(items) {
-                localStorage.setItem(historyKey, JSON.stringify(items.slice(0, 20)));
+                localStorage.setItem(historyKey, JSON.stringify(items.slice(0, historyLimit)));
             }
 
             function addHistory(input, output, detectedLanguage) {
@@ -306,60 +395,387 @@
                 bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false }).show();
             }
 
-            async function translateSelection() {
-                if (!translateSelected.checked || document.activeElement !== documentText) {
+            function activeTextArea() {
+                return activeWorkspace === 'file' ? fileText : sampleText;
+            }
+
+            function activeReplacementHistoryKey() {
+                return activeWorkspace === 'file'
+                    ? `file:${currentSegmentIndex}`
+                    : 'sample';
+            }
+
+            function currentReplacementHistory() {
+                const key = activeReplacementHistoryKey();
+                if (!replacementHistories.has(key)) {
+                    replacementHistories.set(key, { undo: [], redo: [] });
+                }
+
+                return replacementHistories.get(key);
+            }
+
+            function updateUndoRedoControls() {
+                const history = currentReplacementHistory();
+                undoReplacement.disabled = history.undo.length === 0;
+                redoReplacement.disabled = history.redo.length === 0;
+            }
+
+            function syncCurrentFileSegment() {
+                const currentSegment = importedSegments[currentSegmentIndex];
+                if (activeWorkspace === 'file' && currentSegment) {
+                    currentSegment.text = fileText.value;
+                }
+            }
+
+            function clearCurrentReplacementHistory() {
+                replacementHistories.delete(activeReplacementHistoryKey());
+                updateUndoRedoControls();
+            }
+
+            function clearReplacementHistories() {
+                replacementHistories.clear();
+                updateUndoRedoControls();
+            }
+
+            function recordReplacement(beforeText, afterText) {
+                if (beforeText === afterText) {
                     return;
                 }
 
-                const start = documentText.selectionStart;
-                const end = documentText.selectionEnd;
-                const selectedText = documentText.value.substring(start, end).trim();
+                const history = currentReplacementHistory();
+                history.undo.push({ beforeText, afterText });
+                if (history.undo.length > replacementHistoryLimit) {
+                    history.undo.shift();
+                }
+
+                history.redo = [];
+                updateUndoRedoControls();
+            }
+
+            function applyReplacementHistory(direction) {
+                const history = currentReplacementHistory();
+                const source = direction === 'undo' ? history.undo : history.redo;
+                const target = direction === 'undo' ? history.redo : history.undo;
+                const change = source.pop();
+
+                if (!change) {
+                    updateUndoRedoControls();
+                    return false;
+                }
+
+                const textArea = activeTextArea();
+                const value = direction === 'undo' ? change.beforeText : change.afterText;
+
+                isApplyingProgrammaticTextChange = true;
+                try {
+                    textArea.value = value;
+                } finally {
+                    isApplyingProgrammaticTextChange = false;
+                }
+                syncCurrentFileSegment();
+
+                const caretPosition = value.length;
+                textArea.focus();
+                textArea.setSelectionRange(caretPosition, caretPosition);
+                target.push(change);
+                updateUndoRedoControls();
+                resetSelectionState();
+                return true;
+            }
+
+            function handleWorkspaceTextInput() {
+                syncCurrentFileSegment();
+
+                if (!isApplyingProgrammaticTextChange) {
+                    clearCurrentReplacementHistory();
+                }
+            }
+
+            function setSelectionStatus(message) {
+                selectionStatus.textContent = message;
+            }
+
+            async function translateSelection(force = false) {
+                const textArea = activeTextArea();
+                if (!translateSelected.checked || (!force && document.activeElement !== textArea)) {
+                    return;
+                }
+
+                const start = textArea.selectionStart;
+                const end = textArea.selectionEnd;
+                const selection = textArea.value.substring(start, end);
+                const selectedText = selection.trim();
 
                 if (selectedText.length < 2) {
                     return;
                 }
 
-                const selectionKey = `${start}:${end}:${selectedText}:${sourceLanguage.value}:${targetLanguage.value}:${replaceSelected.checked}`;
+                if (selectedText.length > maxSelectionLength) {
+                    setSelectionStatus(`Select up to ${maxSelectionLength.toLocaleString()} characters at a time.`);
+                    return;
+                }
+
+                const selectionKey = `${activeWorkspace}:${start}:${end}:${selectedText}:${sourceLanguage.value}:${targetLanguage.value}:${replaceSelected.checked}`;
                 if (selectionKey === lastSelectionKey) {
                     return;
                 }
                 lastSelectionKey = selectionKey;
 
-                const params = new URLSearchParams({
-                    'lang-from': sourceLanguage.value,
-                    'lang-to': targetLanguage.value,
-                    text: selectedText
-                });
-
-                selectionStatus.textContent = 'Translating...';
+                setSelectionStatus('Translating...');
 
                 try {
-                    const response = await fetch(`${translateEndpoint}?${params}`);
+                    const response = await fetch(translateEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': antiForgeryToken
+                        },
+                        body: JSON.stringify({
+                            text: selectedText,
+                            languageFrom: sourceLanguage.value,
+                            languageTo: targetLanguage.value
+                        })
+                    });
                     const result = await response.json();
 
-                    if (!result.status?.isOk) {
-                        selectionStatus.textContent = result.data?.message || result.status?.phrase || 'Translation unavailable';
+                    if (!response.ok || !result.status?.isOk) {
+                        setSelectionStatus(result.data?.message || result.status?.phrase || 'Translation unavailable');
                         return;
                     }
 
                     const output = result.data?.text ?? '';
+                    if (!output) {
+                        setSelectionStatus('Translation unavailable');
+                        return;
+                    }
 
                     if (replaceSelected.checked) {
-                        documentText.setRangeText(output, start, end, 'end');
+                        const beforeText = textArea.value;
+                        const leadingWhitespace = selection.match(/^\s*/)?.[0] ?? '';
+                        const trailingWhitespace = selection.match(/\s*$/)?.[0] ?? '';
+                        isApplyingProgrammaticTextChange = true;
+                        try {
+                            textArea.setRangeText(`${leadingWhitespace}${output}${trailingWhitespace}`, start, end, 'end');
+                        } finally {
+                            isApplyingProgrammaticTextChange = false;
+                        }
+                        syncCurrentFileSegment();
+                        recordReplacement(beforeText, textArea.value);
                     } else {
                         showToast(output);
                     }
 
                     addHistory(selectedText, output, result.data?.detectedLanguage);
-                    selectionStatus.textContent = '';
+                    setSelectionStatus('');
                 } catch {
-                    selectionStatus.textContent = 'Translation unavailable';
+                    setSelectionStatus('Translation unavailable');
                 }
             }
 
             function scheduleSelectionTranslation() {
                 clearTimeout(selectionTimer);
-                selectionTimer = window.setTimeout(translateSelection, 650);
+                selectionTimer = window.setTimeout(() => translateSelection(), 650);
+            }
+
+            function resetSelectionState() {
+                lastSelectionKey = '';
+                setSelectionStatus('');
+            }
+
+            function setActiveWorkspace(workspace) {
+                activeWorkspace = workspace;
+                document.getElementById('sample-workspace').hidden = workspace !== 'sample';
+                document.getElementById('file-workspace').hidden = workspace !== 'file';
+                resetSample.hidden = workspace !== 'sample';
+
+                document.querySelectorAll('[data-workspace-tab]').forEach(button => {
+                    const isActive = button.dataset.workspaceTab === workspace;
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-selected', String(isActive));
+                });
+
+                resetSelectionState();
+                updateUndoRedoControls();
+            }
+
+            function showFileImportMessage(message, isError = false) {
+                fileImportMessage.textContent = message;
+                fileImportMessage.hidden = !message;
+                fileImportMessage.classList.toggle('is-error', Boolean(message) && isError);
+            }
+
+            function renderCurrentSegment() {
+                const segment = importedSegments[currentSegmentIndex];
+                if (!segment) {
+                    return;
+                }
+
+                fileText.value = segment.text;
+                segmentPosition.textContent = `Section ${currentSegmentIndex + 1} of ${importedSegments.length}`;
+                previousSegment.disabled = currentSegmentIndex === 0;
+                nextSegment.disabled = currentSegmentIndex === importedSegments.length - 1;
+                resetSelectionState();
+                updateUndoRedoControls();
+            }
+
+            function resetPendingFile() {
+                selectedFile = null;
+                fileInput.value = '';
+                fileSelectionName.textContent = '';
+                fileSelectionName.hidden = true;
+                importFile.disabled = true;
+            }
+
+            function getFileExtension(fileName) {
+                const separator = fileName.lastIndexOf('.');
+                return separator === -1 ? '' : fileName.substring(separator + 1).toLowerCase();
+            }
+
+            function setSelectedFile(file) {
+                resetPendingFile();
+
+                if (!file) {
+                    return;
+                }
+
+                const extension = getFileExtension(file.name);
+                if (extension !== 'txt' && extension !== 'docx') {
+                    showFileImportMessage('Supported file types: TXT and DOCX.', true);
+                    return;
+                }
+
+                if (file.size > maxUploadBytes) {
+                    showFileImportMessage(`The file is larger than the ${maxUploadSizeLabel} import limit.`, true);
+                    return;
+                }
+
+                selectedFile = file;
+                fileSelectionName.textContent = file.name;
+                fileSelectionName.hidden = false;
+                importFile.disabled = false;
+                showFileImportMessage('');
+            }
+
+            function removeDropState() {
+                fileDropDepth = 0;
+                fileDropZone.classList.remove('is-dragging');
+            }
+
+            function resetImportedFile() {
+                resetPendingFile();
+                removeDropState();
+                importedSegments = [];
+                currentSegmentIndex = 0;
+                clearReplacementHistories();
+                fileText.value = '';
+                fileEditor.hidden = true;
+                fileUpload.hidden = false;
+                showFileImportMessage('');
+                resetSelectionState();
+            }
+
+            async function openSelectedFile() {
+                const file = selectedFile;
+                if (!file) {
+                    return;
+                }
+
+                importFile.disabled = true;
+                importFile.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+                showFileImportMessage('');
+
+                try {
+                    const body = new FormData();
+                    body.append('file', file);
+
+                    const response = await fetch(fileImportEndpoint, {
+                        method: 'POST',
+                        headers: { RequestVerificationToken: antiForgeryToken },
+                        body
+                    });
+                    const result = await response.json().catch(() => ({}));
+
+                    if (!response.ok || !Array.isArray(result.segments) || result.segments.length === 0) {
+                        const fallbackMessage = response.status === 413
+                            ? `The file is larger than the ${maxUploadSizeLabel} import limit.`
+                            : 'The file could not be imported.';
+                        showFileImportMessage(result.message || fallbackMessage, true);
+                        return;
+                    }
+
+                    clearReplacementHistories();
+                    importedSegments = result.segments;
+                    currentSegmentIndex = 0;
+                    importedFileName.textContent = result.fileName || file.name;
+                    resetPendingFile();
+                    fileUpload.hidden = true;
+                    fileEditor.hidden = false;
+                    renderCurrentSegment();
+                } catch {
+                    showFileImportMessage('The file could not be imported. Please try again.', true);
+                } finally {
+                    importFile.disabled = !selectedFile;
+                    importFile.innerHTML = '<i class="bi bi-file-earmark-text me-2"></i>Open text';
+                }
+            }
+
+            function selectDroppedFile(event) {
+                event.preventDefault();
+                removeDropState();
+
+                const files = Array.from(event.dataTransfer?.files ?? []);
+                if (files.length !== 1) {
+                    resetPendingFile();
+                    showFileImportMessage('Drop one TXT or DOCX file at a time.', true);
+                    return;
+                }
+
+                setSelectedFile(files[0]);
+            }
+
+            function handleFileInputChange() {
+                setSelectedFile(fileInput.files?.[0] ?? null);
+            }
+
+            function beginDropState(event) {
+                event.preventDefault();
+                fileDropDepth++;
+                fileDropZone.classList.add('is-dragging');
+            }
+
+            function updateDropState(event) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                fileDropZone.classList.add('is-dragging');
+            }
+
+            function leaveDropZone(event) {
+                event.preventDefault();
+                fileDropDepth--;
+                if (fileDropDepth <= 0) {
+                    removeDropState();
+                }
+            }
+
+            function preventFileDrop(event) {
+                event.preventDefault();
+            }
+
+            function handleUndoRedoShortcut(event) {
+                if (document.activeElement !== activeTextArea() || event.altKey || !(event.ctrlKey || event.metaKey)) {
+                    return;
+                }
+
+                const key = event.key.toLowerCase();
+                const direction = key === 'y' || (key === 'z' && event.shiftKey)
+                    ? 'redo'
+                    : key === 'z'
+                        ? 'undo'
+                        : null;
+
+                if (direction && applyReplacementHistory(direction)) {
+                    event.preventDefault();
+                }
             }
 
             document.querySelectorAll('[data-submit-action]').forEach(button => {
@@ -368,20 +784,68 @@
                 });
             });
 
+            document.querySelectorAll('[data-workspace-tab]').forEach(button => {
+                button.addEventListener('click', () => setActiveWorkspace(button.dataset.workspaceTab));
+            });
+
             form?.addEventListener('submit', event => {
                 submitAction.value = event.submitter?.dataset.submitAction || submitAction.value || 'translate';
                 translateButton.disabled = true;
                 translateButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
             });
 
-            documentText.addEventListener('select', scheduleSelectionTranslation);
-            documentText.addEventListener('keyup', scheduleSelectionTranslation);
-            documentText.addEventListener('mouseup', scheduleSelectionTranslation);
-            resetDocument.addEventListener('click', () => {
-                documentText.value = defaultDocumentText;
-                lastSelectionKey = '';
-                selectionStatus.textContent = '';
+            [sampleText, fileText].forEach(textArea => {
+                textArea.addEventListener('select', scheduleSelectionTranslation);
+                textArea.addEventListener('keyup', scheduleSelectionTranslation);
+                textArea.addEventListener('mouseup', scheduleSelectionTranslation);
+                textArea.addEventListener('input', handleWorkspaceTextInput);
             });
+
+            selectAllText.addEventListener('click', () => {
+                const textArea = activeTextArea();
+                if (!textArea.value.trim()) {
+                    setSelectionStatus(activeWorkspace === 'file' ? 'Choose a file first.' : 'No text to select.');
+                    return;
+                }
+
+                textArea.focus();
+                textArea.select();
+                translateSelection(true);
+            });
+
+            resetSample.addEventListener('click', () => {
+                sampleText.value = defaultSampleText;
+                clearCurrentReplacementHistory();
+                resetSelectionState();
+            });
+
+            fileInput.addEventListener('change', handleFileInputChange);
+            fileDropZone.addEventListener('dragenter', beginDropState);
+            fileDropZone.addEventListener('dragover', updateDropState);
+            fileDropZone.addEventListener('dragleave', leaveDropZone);
+            fileDropZone.addEventListener('drop', selectDroppedFile);
+            fileDropZone.addEventListener('dragend', removeDropState);
+            document.addEventListener('dragover', preventFileDrop);
+            document.addEventListener('drop', preventFileDrop);
+            document.addEventListener('keydown', handleUndoRedoShortcut);
+            importFile.addEventListener('click', openSelectedFile);
+            undoReplacement.addEventListener('click', () => applyReplacementHistory('undo'));
+            redoReplacement.addEventListener('click', () => applyReplacementHistory('redo'));
+            previousSegment.addEventListener('click', () => {
+                if (currentSegmentIndex > 0) {
+                    syncCurrentFileSegment();
+                    currentSegmentIndex--;
+                    renderCurrentSegment();
+                }
+            });
+            nextSegment.addEventListener('click', () => {
+                if (currentSegmentIndex < importedSegments.length - 1) {
+                    syncCurrentFileSegment();
+                    currentSegmentIndex++;
+                    renderCurrentSegment();
+                }
+            });
+            clearFile.addEventListener('click', resetImportedFile);
 
             clearHistory.addEventListener('click', () => {
                 localStorage.removeItem(historyKey);
@@ -398,6 +862,8 @@
                 addHistory(initialInput, initialOutput, @Json.Serialize(Model.DetectedLanguage));
             }
 
+            resetSample.hidden = false;
+            updateUndoRedoControls();
             renderHistory();
         })();
     </script>

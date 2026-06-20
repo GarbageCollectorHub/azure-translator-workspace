@@ -2,6 +2,8 @@ using Microsoft.Azure.Cosmos;
 
 namespace TranslatorAzure.Services.DbContainer
 {
+    // Резервное подключение к Cosmos DB для будущих пользовательских данных.
+    // В текущем workflow переводчика не зарегистрировано и не используется.
     public class CosmosDbContainer(IConfiguration configuration) : IDbContainer
     {
         private readonly IConfiguration _configuration = configuration;

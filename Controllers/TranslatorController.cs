@@ -55,9 +55,26 @@ namespace TranslatorAzure.Controllers
             return View(viewModel);
         }
 
-        [HttpGet]
-        public async Task<JsonResult> Translate(TranslatorFormModel formModel, CancellationToken cancellationToken)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Translate(
+            [FromBody] TranslationRequest request,
+            CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(CreateTranslationErrorResponse(
+                    $"Choose between 2 and {TranslationRequest.MaxTextLength:N0} characters to translate.",
+                    StatusCodes.Status400BadRequest));
+            }
+
+            var formModel = new TranslatorFormModel
+            {
+                LanguageFrom = request.LanguageFrom,
+                LanguageTo = request.LanguageTo,
+                Text = request.Text
+            };
+
             NormalizeForm(formModel);
 
             try
@@ -66,14 +83,17 @@ namespace TranslatorAzure.Controllers
 
                 if (string.IsNullOrWhiteSpace(result.TranslatedText))
                 {
-                    return Json(CreateTranslationErrorResponse());
+                    return StatusCode(
+                        StatusCodes.Status503ServiceUnavailable,
+                        CreateTranslationErrorResponse());
                 }
 
-                return Json(new RestResponse
+                return Ok(new RestResponse
                 {
                     Meta = new()
                     {
                         Service = "TranslatorAzure",
+                        Method = "POST",
                         Action = "Text Translation",
                         Time = DateTime.Now.Ticks,
                         DataType = "translation",
@@ -95,7 +115,9 @@ namespace TranslatorAzure.Controllers
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Azure Translator API request failed.");
-                return Json(CreateTranslationErrorResponse());
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    CreateTranslationErrorResponse());
             }
         }
 
@@ -192,26 +214,31 @@ namespace TranslatorAzure.Controllers
                 ?? "en";
         }
 
-        private static RestResponse CreateTranslationErrorResponse()
+        private static RestResponse CreateTranslationErrorResponse(
+            string? message = null,
+            int statusCode = StatusCodes.Status503ServiceUnavailable)
         {
+            message ??= TranslationUnavailableMessage;
+
             return new RestResponse
             {
                 Status = new()
                 {
                     IsOk = false,
-                    Code = 500,
-                    Phrase = TranslationUnavailableMessage
+                    Code = statusCode,
+                    Phrase = message
                 },
                 Meta = new()
                 {
                     Service = "TranslatorAzure",
+                    Method = "POST",
                     Action = "Text Translation",
                     Time = DateTime.Now.Ticks,
                     DataType = "error"
                 },
                 Data = new
                 {
-                    message = TranslationUnavailableMessage
+                    message
                 }
             };
         }
