@@ -199,6 +199,21 @@ body {
   line-height: 1;
 }
 
+.toolbar-command-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 6px;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
 .panel-title,
 .panel-controls label,
 .toolbar-icon-button {
@@ -206,6 +221,11 @@ body {
 }
 
 .toolbar-icon-button:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.toolbar-command-button:hover {
   color: var(--primary);
   background: var(--primary-soft);
 }
@@ -221,12 +241,38 @@ body {
   width: 100%;
   min-height: clamp(280px, 34vh, 470px);
   margin-top: 14px;
-  border: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   outline: 0;
   resize: vertical;
+  cursor: text;
   color: var(--text);
-  background: transparent;
+  background: #fcfdff;
   line-height: 1.65;
+}
+
+.document-textarea:hover {
+  border-color: #bdcad9;
+  background: var(--surface);
+}
+
+.document-textarea:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px rgba(23, 105, 224, 0.42);
+}
+
+.editor-helper {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.editor-helper i {
+  margin-right: 6px;
+  color: #8a9ab0;
 }
 
 .history-panel {
@@ -589,7 +635,7 @@ body {
 
 @media (min-width: 901px) and (min-height: 900px) {
   .workspace-grid {
-    height: clamp(480px, 50dvh, 720px);
+    height: clamp(480px, 55dvh, 820px);
     min-height: 0;
   }
 

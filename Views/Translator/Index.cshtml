@@ -12,6 +12,20 @@
         ? "Hello, how are you today?"
         : Model.FormModel.Text;
 
+    string workspaceSampleText = @"Garbage collection in .NET
+
+Every object created in managed code is tracked by the CLR garbage collector. Most ordinary allocations begin on the small object heap; very large objects use the large object heap, and explicitly pinned allocations can use the pinned object heap. These are different allocation regions, not different ownership rules: the collector still determines whether each managed object can be reached by the application.
+
+Creating a small object is intentionally cheap. The runtime normally advances an allocation pointer instead of searching for a suitable free block. That makes allocation fast, but the heap must occasionally be collected before more space can be reserved.
+
+A collection begins with roots: local variables on thread stacks, static fields, CPU registers, and runtime handles. The runtime follows references from those roots. Every object it can reach is live; an object outside that graph is garbage and its memory can be reused.
+
+New allocations start in generation 0 because most objects are short-lived. Survivors can be promoted to generation 1 and then generation 2. Collecting a young generation examines a smaller part of the heap, while a generation 2 collection is broader and normally more expensive.
+
+After a collection, movable live objects can be compacted into a contiguous block, and the runtime updates the references to them. Pinned objects cannot move, so long-lived pinning can make compaction less effective.
+
+GC releases managed memory. It does not close file handles, database connections, or network streams; those resources still need deterministic cleanup through IDisposable and using.";
+
     var sourceLanguageInfo = selectedFrom == autoCode
         ? null
         : Model.TranslatorLanguages.translation.GetValueOrDefault(selectedFrom);
@@ -157,11 +171,19 @@
         <section class="document-panel" aria-label="Text workspace">
             <div class="panel-toolbar">
                 <div class="workspace-tabs" role="tablist" aria-label="Workspace type">
-                    <button class="workspace-tab is-active" type="button" role="tab" aria-selected="true" data-workspace-tab="sample">Sample text</button>
-                    <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-tab="file">File text</button>
+                    <button class="workspace-tab is-active" type="button" role="tab" aria-selected="true" data-workspace-tab="sample">Text editor</button>
+                    <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-tab="file">Imported file</button>
                 </div>
 
                 <div class="panel-controls">
+                    <button id="paste-text" class="btn btn-outline-secondary toolbar-command-button" type="button" title="Paste text from clipboard" aria-label="Paste text from clipboard">
+                        <i class="bi bi-clipboard-plus"></i>
+                        <span>Paste</span>
+                    </button>
+                    <button id="clear-text" class="btn btn-outline-secondary toolbar-command-button" type="button" title="Clear current text" aria-label="Clear current text">
+                        <i class="bi bi-eraser"></i>
+                        <span>Clear</span>
+                    </button>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="translate-selected" checked>
                         <label class="form-check-label" for="translate-selected">Translate selection</label>
@@ -179,7 +201,7 @@
                     <button id="redo-replacement" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Redo replacement (Ctrl+Y)" aria-label="Redo replacement" disabled>
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
-                    <button id="reset-sample" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Reset sample text" aria-label="Reset sample text">
+                    <button id="reset-sample" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Restore default text" aria-label="Restore default text">
                         <i class="bi bi-arrow-repeat"></i>
                     </button>
                 </div>
@@ -187,7 +209,8 @@
             </div>
 
             <div id="sample-workspace" class="workspace-content">
-                <textarea id="sample-text" class="document-textarea" spellcheck="true">Before each release, the team reviews the changelog, checks known issues, and prepares customer-facing notes for support teams in different regions. Clear wording helps local teams explain what changed, what still needs attention, and which steps users should follow next.</textarea>
+                <textarea id="sample-text" class="document-textarea" spellcheck="true" placeholder="Write or paste text here">@workspaceSampleText</textarea>
+                <p class="editor-helper"><i class="bi bi-pencil-square" aria-hidden="true"></i>Type or paste your own text here.</p>
             </div>
 
             <div id="file-workspace" class="workspace-content" hidden>
@@ -275,6 +298,8 @@
             const defaultSampleText = sampleText.value;
             const translateSelected = document.getElementById('translate-selected');
             const replaceSelected = document.getElementById('replace-selected');
+            const pasteText = document.getElementById('paste-text');
+            const clearText = document.getElementById('clear-text');
             const selectAllText = document.getElementById('select-all-text');
             const undoReplacement = document.getElementById('undo-replacement');
             const redoReplacement = document.getElementById('redo-replacement');
@@ -489,6 +514,54 @@
                 if (!isApplyingProgrammaticTextChange) {
                     clearCurrentReplacementHistory();
                 }
+            }
+
+            async function pasteFromClipboard() {
+                if (!navigator.clipboard?.readText) {
+                    setSelectionStatus('Clipboard access is unavailable. Use Ctrl+V.');
+                    return;
+                }
+
+                try {
+                    const pastedText = await navigator.clipboard.readText();
+                    if (!pastedText) {
+                        return;
+                    }
+
+                    const textArea = activeTextArea();
+                    const beforeText = textArea.value;
+                    const shouldReplaceDefaultSample = activeWorkspace === 'sample'
+                        && textArea.value === defaultSampleText
+                        && textArea.selectionStart === textArea.selectionEnd;
+
+                    if (shouldReplaceDefaultSample) {
+                        textArea.select();
+                    }
+
+                    textArea.setRangeText(pastedText, textArea.selectionStart, textArea.selectionEnd, 'end');
+                    syncCurrentFileSegment();
+                    recordReplacement(beforeText, textArea.value);
+                    resetSelectionState();
+                    textArea.focus();
+                } catch {
+                    setSelectionStatus('Clipboard access is unavailable. Use Ctrl+V.');
+                }
+            }
+
+            function clearCurrentText() {
+                const textArea = activeTextArea();
+                const beforeText = textArea.value;
+
+                if (!beforeText) {
+                    textArea.focus();
+                    return;
+                }
+
+                textArea.value = '';
+                syncCurrentFileSegment();
+                recordReplacement(beforeText, '');
+                resetSelectionState();
+                textArea.focus();
             }
 
             function setSelectionStatus(message) {
@@ -813,6 +886,8 @@
                 translateSelection(true);
             });
 
+            pasteText.addEventListener('click', pasteFromClipboard);
+            clearText.addEventListener('click', clearCurrentText);
             resetSample.addEventListener('click', () => {
                 sampleText.value = defaultSampleText;
                 clearCurrentReplacementHistory();
