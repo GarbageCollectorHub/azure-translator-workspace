@@ -49,13 +49,13 @@ GC releases managed memory. It does not close file handles, database connections
 <section class="translator-shell">
     <h1 class="visually-hidden">Azure Translator</h1>
 
-    <form id="translator-form" class="translator-card" method="get" asp-controller="Translator" asp-action="Index">
+    <form id="translator-form" class="translation-surface" method="get" asp-controller="Translator" asp-action="Index">
         @Html.AntiForgeryToken()
         <input type="hidden" id="submit-action" name="btn" value="translate" />
         <input type="hidden" name="detected-lang" value="@Model.DetectedLanguage" />
         <div class="translator-grid">
             <div class="translator-pane">
-                <label class="form-label" for="source-language">From</label>
+                <label class="form-label" for="source-language">Source</label>
                 <select id="source-language" name="lang-from" class="form-select" aria-label="Source language">
                     <option value="@autoCode" selected="@(selectedFrom == autoCode ? "selected" : null)">Auto-detect</option>
                     @foreach (var lang in Model.TranslatorLanguages.translation)
@@ -107,7 +107,7 @@ GC releases managed memory. It does not close file handles, database connections
                 </button>
                 <button
                     id="translate-button"
-                    class="btn btn-primary icon-button"
+                    class="btn btn-primary icon-button translate-button"
                     type="submit"
                     data-submit-action="translate"
                     title="Translate"
@@ -117,7 +117,7 @@ GC releases managed memory. It does not close file handles, database connections
             </div>
 
             <div class="translator-pane">
-                <label class="form-label" for="target-language">To</label>
+                <label class="form-label" for="target-language">Target</label>
                 <select id="target-language" name="lang-to" class="form-select" aria-label="Target language">
                     @foreach (var lang in Model.TranslatorLanguages.translation)
                     {
@@ -175,35 +175,45 @@ GC releases managed memory. It does not close file handles, database connections
                     <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-tab="file">Imported file</button>
                 </div>
 
-                <div class="panel-controls">
-                    <button id="paste-text" class="btn btn-outline-secondary toolbar-command-button" type="button" title="Paste text from clipboard" aria-label="Paste text from clipboard">
-                        <i class="bi bi-clipboard-plus"></i>
-                        <span>Paste</span>
-                    </button>
-                    <button id="clear-text" class="btn btn-outline-secondary toolbar-command-button" type="button" title="Clear current text" aria-label="Clear current text">
-                        <i class="bi bi-eraser"></i>
-                        <span>Clear</span>
-                    </button>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="translate-selected" checked>
-                        <label class="form-check-label" for="translate-selected">Translate selection</label>
+                <div class="panel-controls" aria-label="Editor controls">
+                    <div class="toolbar-group">
+                        <button id="paste-text" class="btn toolbar-command-button" type="button" title="Paste text from clipboard" aria-label="Paste text from clipboard">
+                            <i class="bi bi-clipboard-plus"></i>
+                            <span>Paste</span>
+                        </button>
+                        <button id="clear-text" class="btn toolbar-command-button" type="button" title="Clear current text" aria-label="Clear current text">
+                            <i class="bi bi-eraser"></i>
+                            <span>Clear</span>
+                        </button>
                     </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="replace-selected">
-                        <label class="form-check-label" for="replace-selected">Replace selection</label>
+                    <div class="toolbar-group toolbar-group--selection">
+                        <label class="toolbar-toggle" for="translate-selected">
+                            <input type="checkbox" id="translate-selected" checked>
+                            <span>Translate selection</span>
+                        </label>
+                        <label class="toolbar-toggle" for="replace-selected">
+                            <input type="checkbox" id="replace-selected">
+                            <span>Replace selection</span>
+                        </label>
                     </div>
-                    <button id="select-all-text" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Select all text in the current section" aria-label="Select all text in the current section">
-                        <i class="bi bi-text-paragraph"></i>
-                    </button>
-                    <button id="undo-replacement" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Undo replacement (Ctrl+Z)" aria-label="Undo replacement" disabled>
-                        <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
-                    <button id="redo-replacement" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Redo replacement (Ctrl+Y)" aria-label="Redo replacement" disabled>
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
-                    <button id="reset-sample" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Restore default text" aria-label="Restore default text">
-                        <i class="bi bi-arrow-repeat"></i>
-                    </button>
+                    <div class="toolbar-group toolbar-group--actions" aria-label="Text actions">
+                        <button id="select-all-text" class="btn toolbar-command-button" type="button" title="Select all text in the current section" aria-label="Select all text in the current section">
+                            <i class="bi bi-text-paragraph"></i>
+                            <span>Select all</span>
+                        </button>
+                        <div class="toolbar-icon-cluster" role="group" aria-label="Replacement history">
+                            <button id="undo-replacement" class="btn toolbar-icon-button" type="button" title="Undo replacement (Ctrl+Z)" aria-label="Undo replacement" disabled>
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            <button id="redo-replacement" class="btn toolbar-icon-button" type="button" title="Redo replacement (Ctrl+Y)" aria-label="Redo replacement" disabled>
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <button id="reset-sample" class="btn toolbar-command-button toolbar-command-button--restore" type="button" title="Restore the default example text" aria-label="Restore the default example text">
+                            <i class="bi bi-arrow-repeat"></i>
+                            <span>Restore text</span>
+                        </button>
+                    </div>
                 </div>
                 <span id="selection-status" class="selection-status" role="status"></span>
             </div>
@@ -252,12 +262,17 @@ GC releases managed memory. It does not close file handles, database connections
             </div>
         </section>
 
-        <aside class="history-panel" aria-label="Translation history">
+        <aside id="history-panel" class="history-panel" aria-label="Translation history" hidden>
             <div class="history-header">
                 <h2>History</h2>
-                <button id="clear-history" class="btn btn-outline-secondary icon-button" type="button" title="Clear history" aria-label="Clear history">
-                    <i class="bi bi-trash3"></i>
-                </button>
+                <div class="history-actions">
+                    <button id="clear-history" class="btn toolbar-icon-button" type="button" title="Clear history" aria-label="Clear history">
+                        <i class="bi bi-trash3"></i>
+                    </button>
+                    <button id="history-close" class="btn toolbar-icon-button" type="button" title="Close history" aria-label="Close history">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
             </div>
             <div id="translation-history" class="history-list"></div>
         </aside>
@@ -305,6 +320,10 @@ GC releases managed memory. It does not close file handles, database connections
             const redoReplacement = document.getElementById('redo-replacement');
             const resetSample = document.getElementById('reset-sample');
             const selectionStatus = document.getElementById('selection-status');
+            const workspaceGrid = document.querySelector('.workspace-grid');
+            const historyPanel = document.getElementById('history-panel');
+            const historyToggle = document.getElementById('history-toggle');
+            const historyClose = document.getElementById('history-close');
             const historyList = document.getElementById('translation-history');
             const clearHistory = document.getElementById('clear-history');
             const translatedText = document.getElementById('translated-text');
@@ -671,6 +690,12 @@ GC releases managed memory. It does not close file handles, database connections
                 updateUndoRedoControls();
             }
 
+            function setHistoryOpen(isOpen) {
+                historyPanel.hidden = !isOpen;
+                workspaceGrid.classList.toggle('is-history-open', isOpen);
+                historyToggle.setAttribute('aria-expanded', String(isOpen));
+            }
+
             function showFileImportMessage(message, isError = false) {
                 fileImportMessage.textContent = message;
                 fileImportMessage.hidden = !message;
@@ -861,6 +886,9 @@ GC releases managed memory. It does not close file handles, database connections
                 button.addEventListener('click', () => setActiveWorkspace(button.dataset.workspaceTab));
             });
 
+            historyToggle.addEventListener('click', () => setHistoryOpen(historyPanel.hidden));
+            historyClose.addEventListener('click', () => setHistoryOpen(false));
+
             form?.addEventListener('submit', event => {
                 submitAction.value = event.submitter?.dataset.submitAction || submitAction.value || 'translate';
                 translateButton.disabled = true;
@@ -938,6 +966,7 @@ GC releases managed memory. It does not close file handles, database connections
             }
 
             resetSample.hidden = false;
+            setHistoryOpen(false);
             updateUndoRedoControls();
             renderHistory();
         })();

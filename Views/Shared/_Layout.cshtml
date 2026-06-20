@@ -11,10 +11,16 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom">
-            <div class="container-fluid px-4">
-                <a class="navbar-brand" asp-controller="Translator" asp-action="Index">Azure Translator</a>
+    <header class="app-header">
+        <nav class="app-bar" aria-label="Application">
+            <div class="app-bar__inner">
+                <a class="app-brand" asp-controller="Translator" asp-action="Index">
+                    <img class="app-brand__logo" src="~/images/azure-translator-workspace-logo.png" alt="Azure Translator Workspace" asp-append-version="true" />
+                </a>
+                <button id="history-toggle" class="btn app-history-toggle" type="button" aria-expanded="false" aria-controls="history-panel">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i>
+                    <span>History</span>
+                </button>
             </div>
         </nav>
     </header>
