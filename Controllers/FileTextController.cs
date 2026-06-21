@@ -24,7 +24,7 @@ public sealed class FileTextController(
                 return BadRequest(new { message = $"The file is larger than the {_options.MaxUploadSizeLabel} import limit." });
             }
 
-            return BadRequest(new { message = "Choose a TXT or DOCX file first." });
+            return BadRequest(new { message = "Choose a TXT, DOCX, or PDF file first." });
         }
 
         try
@@ -39,10 +39,14 @@ public sealed class FileTextController(
             return Ok(new
             {
                 document.FileName,
+                document.PageCount,
                 segments = document.Segments.Select(segment => new
                 {
                     segment.Number,
-                    segment.Text
+                    segment.Text,
+                    segment.SourcePage,
+                    segment.PartNumber,
+                    segment.PartCount
                 })
             });
         }

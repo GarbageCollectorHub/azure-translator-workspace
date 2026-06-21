@@ -226,10 +226,11 @@ GC releases managed memory. It does not close file handles, database connections
             <div id="file-workspace" class="workspace-content" hidden>
                 <div id="file-upload" class="file-upload">
                     <label id="file-drop-zone" class="file-drop-zone">
-                        <input id="file-input" class="visually-hidden" type="file" accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                        <input id="file-input" class="visually-hidden" type="file" accept=".txt,.docx,.pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" />
                         <span class="file-upload-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
-                        <strong>Choose or drop a text file</strong>
-                        <span>TXT, DOCX - up to @maxUploadSizeLabel</span>
+                        <strong>Choose or drop a file</strong>
+                        <span class="file-upload-types">TXT, DOCX, PDF - up to @maxUploadSizeLabel</span>
+                        <span class="file-upload-note">PDF: selectable text only. Scans and image-only files are not supported.</span>
                     </label>
                     <div class="file-selection-row">
                         <span id="file-selection-name" class="file-selection-name" hidden></span>
@@ -345,6 +346,7 @@ GC releases managed memory. It does not close file handles, database connections
             let selectionTimer = 0;
             let lastSelectionKey = '';
             let importedSegments = [];
+            let importedPageCount = null;
             let currentSegmentIndex = 0;
             let selectedFile = null;
             let fileDropDepth = 0;
@@ -709,7 +711,17 @@ GC releases managed memory. It does not close file handles, database connections
                 }
 
                 fileText.value = segment.text;
-                segmentPosition.textContent = `Section ${currentSegmentIndex + 1} of ${importedSegments.length}`;
+                if (Number.isInteger(segment.sourcePage)) {
+                    const pageCountSuffix = Number.isInteger(importedPageCount)
+                        ? ` of ${importedPageCount}`
+                        : '';
+                    const partSuffix = segment.partCount > 1
+                        ? `, part ${segment.partNumber} of ${segment.partCount}`
+                        : '';
+                    segmentPosition.textContent = `Page ${segment.sourcePage}${pageCountSuffix}${partSuffix}`;
+                } else {
+                    segmentPosition.textContent = `Section ${currentSegmentIndex + 1} of ${importedSegments.length}`;
+                }
                 previousSegment.disabled = currentSegmentIndex === 0;
                 nextSegment.disabled = currentSegmentIndex === importedSegments.length - 1;
                 resetSelectionState();
@@ -737,8 +749,8 @@ GC releases managed memory. It does not close file handles, database connections
                 }
 
                 const extension = getFileExtension(file.name);
-                if (extension !== 'txt' && extension !== 'docx') {
-                    showFileImportMessage('Supported file types: TXT and DOCX.', true);
+                if (extension !== 'txt' && extension !== 'docx' && extension !== 'pdf') {
+                    showFileImportMessage('Supported file types: TXT, DOCX, and PDF.', true);
                     return;
                 }
 
@@ -763,6 +775,7 @@ GC releases managed memory. It does not close file handles, database connections
                 resetPendingFile();
                 removeDropState();
                 importedSegments = [];
+                importedPageCount = null;
                 currentSegmentIndex = 0;
                 clearReplacementHistories();
                 fileText.value = '';
@@ -803,6 +816,7 @@ GC releases managed memory. It does not close file handles, database connections
 
                     clearReplacementHistories();
                     importedSegments = result.segments;
+                    importedPageCount = Number.isInteger(result.pageCount) ? result.pageCount : null;
                     currentSegmentIndex = 0;
                     importedFileName.textContent = result.fileName || file.name;
                     resetPendingFile();
@@ -824,7 +838,7 @@ GC releases managed memory. It does not close file handles, database connections
                 const files = Array.from(event.dataTransfer?.files ?? []);
                 if (files.length !== 1) {
                     resetPendingFile();
-                    showFileImportMessage('Drop one TXT or DOCX file at a time.', true);
+                    showFileImportMessage('Drop one TXT, DOCX, or PDF file at a time.', true);
                     return;
                 }
 

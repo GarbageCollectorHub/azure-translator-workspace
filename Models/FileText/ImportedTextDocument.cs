@@ -2,4 +2,5 @@ namespace TranslatorAzure.Models.FileText;
 
 public sealed record ImportedTextDocument(
     string FileName,
-    IReadOnlyList<FileTextSegment> Segments);
+    IReadOnlyList<FileTextSegment> Segments,
+    int? PageCount);

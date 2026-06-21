@@ -21,9 +21,15 @@ builder.Services
     .Validate(options => options.MaxUploadBytes > 0, "The file import size limit must be positive.")
     .Validate(options => options.MaxUploadBytes <= FileTextImportOptions.DefaultMaxUploadBytes,
         $"The file import size limit cannot exceed {FileTextImportOptions.DefaultMaxUploadBytes} bytes.")
+    .Validate(options => options.MaxPdfPages > 0 && options.MaxPdfPages <= FileTextImportOptions.DefaultMaxPdfPages,
+        $"The PDF page limit must be between 1 and {FileTextImportOptions.DefaultMaxPdfPages}.")
+    .Validate(options => options.MaxExtractedCharacters > 0
+        && options.MaxExtractedCharacters <= FileTextImportOptions.DefaultMaxExtractedCharacters,
+        $"The extracted text limit cannot exceed {FileTextImportOptions.DefaultMaxExtractedCharacters} characters.")
     .ValidateOnStart();
 builder.Services.AddSingleton<IFileTextExtractor, PlainTextExtractor>();
 builder.Services.AddSingleton<IFileTextExtractor, OpenXmlWordTextExtractor>();
+builder.Services.AddSingleton<IFileTextExtractor, PdfTextExtractor>();
 builder.Services.AddScoped<IFileTextImportService, FileTextImportService>();
 
 var app = builder.Build();

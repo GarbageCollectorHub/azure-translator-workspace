@@ -19,12 +19,12 @@ public sealed class FileTextImportService(
     {
         if (string.IsNullOrWhiteSpace(fileName) || fileLength <= 0)
         {
-            throw new FileTextImportException("Choose a non-empty TXT or DOCX file.");
+            throw new FileTextImportException("Choose a non-empty TXT, DOCX, or PDF file.");
         }
 
         if (fileLength > _options.MaxUploadBytes)
         {
-            throw new FileTextImportException("The file is larger than the 2 MB import limit.");
+            throw new FileTextImportException($"The file is larger than the {_options.MaxUploadSizeLabel} import limit.");
         }
 
         var extension = Path.GetExtension(fileName);
@@ -32,29 +32,55 @@ public sealed class FileTextImportService(
 
         if (extractor is null)
         {
-            throw new FileTextImportException("Supported file types: TXT and DOCX.");
+            throw new FileTextImportException("Supported file types: TXT, DOCX, and PDF.");
         }
 
-        string extractedText;
+        ExtractedTextDocument extractedDocument;
         try
         {
-            extractedText = await extractor.ExtractAsync(source, cancellationToken);
+            extractedDocument = await extractor.ExtractAsync(source, cancellationToken);
+        }
+        catch (FileTextImportException)
+        {
+            throw;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            throw new FileTextImportException("The file could not be read. Choose a valid TXT or DOCX file.");
+            throw new FileTextImportException("The file could not be read. Choose a valid TXT, DOCX, or PDF file.");
         }
 
-        var segments = SplitIntoSegments(extractedText).ToList();
+        var segments = SplitIntoSegments(extractedDocument.Sections).ToList();
         if (segments.Count == 0)
         {
             throw new FileTextImportException("No editable text was found in this file.");
         }
 
-        return new ImportedTextDocument(Path.GetFileName(fileName), segments);
+        return new ImportedTextDocument(
+            Path.GetFileName(fileName),
+            segments,
+            extractedDocument.PageCount);
     }
 
-    private IEnumerable<FileTextSegment> SplitIntoSegments(string text)
+    private IEnumerable<FileTextSegment> SplitIntoSegments(IReadOnlyList<ExtractedTextSection> sections)
+    {
+        var number = 1;
+
+        foreach (var section in sections)
+        {
+            var parts = SplitText(section.Text).ToList();
+            for (var index = 0; index < parts.Count; index++)
+            {
+                yield return new FileTextSegment(
+                    number++,
+                    parts[index],
+                    section.SourcePage,
+                    index + 1,
+                    parts.Count);
+            }
+        }
+    }
+
+    private IEnumerable<string> SplitText(string text)
     {
         var normalizedText = text.Replace("\r\n", "\n").Trim();
         if (string.IsNullOrWhiteSpace(normalizedText))
@@ -63,8 +89,6 @@ public sealed class FileTextImportService(
         }
 
         var section = new StringBuilder();
-        var number = 1;
-
         foreach (var paragraph in normalizedText.Split("\n", StringSplitOptions.None))
         {
             var delimiterLength = section.Length == 0 ? 0 : Environment.NewLine.Length;
@@ -73,13 +97,13 @@ public sealed class FileTextImportService(
             {
                 if (section.Length > 0)
                 {
-                    yield return new FileTextSegment(number++, section.ToString());
+                    yield return section.ToString();
                     section.Clear();
                 }
 
                 foreach (var part in SplitLongText(paragraph))
                 {
-                    yield return new FileTextSegment(number++, part);
+                    yield return part;
                 }
 
                 continue;
@@ -87,7 +111,7 @@ public sealed class FileTextImportService(
 
             if (section.Length + paragraph.Length + delimiterLength > _options.MaxSegmentCharacters)
             {
-                yield return new FileTextSegment(number++, section.ToString());
+                yield return section.ToString();
                 section.Clear();
             }
 
@@ -101,7 +125,7 @@ public sealed class FileTextImportService(
 
         if (section.Length > 0)
         {
-            yield return new FileTextSegment(number, section.ToString());
+            yield return section.ToString();
         }
     }
 

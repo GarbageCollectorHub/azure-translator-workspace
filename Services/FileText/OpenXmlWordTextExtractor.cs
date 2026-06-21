@@ -1,5 +1,6 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using TranslatorAzure.Models.FileText;
 
 namespace TranslatorAzure.Services.FileText;
 
@@ -8,8 +9,11 @@ public sealed class OpenXmlWordTextExtractor : IFileTextExtractor
     public bool Supports(string extension) =>
         string.Equals(extension, ".docx", StringComparison.OrdinalIgnoreCase);
 
-    public Task<string> ExtractAsync(Stream source, CancellationToken cancellationToken = default)
+    public Task<ExtractedTextDocument> ExtractAsync(
+        Stream source,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var document = WordprocessingDocument.Open(source, isEditable: false);
 
         var paragraphs = document.MainDocumentPart?.Document?.Body?
@@ -18,6 +22,7 @@ public sealed class OpenXmlWordTextExtractor : IFileTextExtractor
             .Where(text => !string.IsNullOrWhiteSpace(text))
             ?? [];
 
-        return Task.FromResult(string.Join(Environment.NewLine + Environment.NewLine, paragraphs));
+        var text = string.Join(Environment.NewLine + Environment.NewLine, paragraphs);
+        return Task.FromResult(new ExtractedTextDocument([new ExtractedTextSection(text)]));
     }
 }

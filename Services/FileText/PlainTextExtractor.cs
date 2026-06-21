@@ -1,4 +1,5 @@
 using System.Text;
+using TranslatorAzure.Models.FileText;
 
 namespace TranslatorAzure.Services.FileText;
 
@@ -7,7 +8,9 @@ public sealed class PlainTextExtractor : IFileTextExtractor
     public bool Supports(string extension) =>
         string.Equals(extension, ".txt", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<string> ExtractAsync(Stream source, CancellationToken cancellationToken = default)
+    public async Task<ExtractedTextDocument> ExtractAsync(
+        Stream source,
+        CancellationToken cancellationToken = default)
     {
         using var reader = new StreamReader(
             source,
@@ -15,6 +18,7 @@ public sealed class PlainTextExtractor : IFileTextExtractor
             detectEncodingFromByteOrderMarks: true,
             leaveOpen: true);
 
-        return await reader.ReadToEndAsync(cancellationToken);
+        var text = await reader.ReadToEndAsync(cancellationToken);
+        return new ExtractedTextDocument([new ExtractedTextSection(text)]);
     }
 }
