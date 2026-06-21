@@ -6,6 +6,9 @@
 # Azure secrets/settings
 azuresettings.json
 
+# Local coverage reports
+coveragereport/
+
 # Visual Studio Azure service dependencies
 Properties/ServiceDependencies/
 

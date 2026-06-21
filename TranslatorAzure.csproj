@@ -15,4 +15,10 @@
     <PackageReference Include="PdfPig" Version="0.1.14" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <Content Remove="tests\**\*" />
+    <None Remove="tests\**\*" />
+  </ItemGroup>
+
 </Project>
