@@ -11,6 +11,7 @@ Live demo: https://garbagecollector.azurewebsites.net/Translator
 - Transliteration display when Azure supports it for the selected language/script.
 - Language switch flow for translated text.
 - Document mode with selected-text translation and optional replacement.
+- TXT, DOCX, and PDF text import with section navigation and PDF preview.
 - Local browser history with copy and clear actions.
 - Responsive UI for desktop and mobile layouts.
 - Graceful error state when Azure Translator is unavailable.

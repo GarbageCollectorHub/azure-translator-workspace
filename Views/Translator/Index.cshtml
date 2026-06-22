@@ -243,23 +243,53 @@ GC releases managed memory. It does not close file handles, database connections
                 <div id="file-editor" class="file-editor" hidden>
                     <div class="file-editor-header">
                         <span id="imported-file-name" class="imported-file-name"></span>
-                        <div class="file-segment-navigation" aria-label="File section navigation">
-                            <button id="previous-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Previous section" aria-label="Previous section">
-                                <i class="bi bi-chevron-left"></i>
-                            </button>
-                            <span id="segment-position"></span>
-                            <button id="next-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Next section" aria-label="Next section">
-                                <i class="bi bi-chevron-right"></i>
-                            </button>
-                            <button id="clear-file" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Close imported file" aria-label="Close imported file">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
+                        <div class="file-editor-actions">
+                            <div id="file-view-toggle" class="file-view-toggle" role="tablist" aria-label="PDF view" hidden>
+                                <button class="file-view-button is-active" type="button" role="tab" aria-selected="true" data-file-view="text">Text</button>
+                                <button class="file-view-button" type="button" role="tab" aria-selected="false" data-file-view="preview">Original PDF</button>
+                                <button class="file-view-button file-view-button--split" type="button" role="tab" aria-selected="false" data-file-view="split" title="Show text and the original PDF side by side">Split</button>
+                            </div>
+                            <div class="file-segment-navigation" aria-label="File section navigation">
+                                <button id="previous-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Previous section" aria-label="Previous section">
+                                    <i class="bi bi-chevron-left"></i>
+                                </button>
+                                <span id="segment-position"></span>
+                                <button id="next-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Next section" aria-label="Next section">
+                                    <i class="bi bi-chevron-right"></i>
+                                </button>
+                                <button id="clear-file" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Close imported file" aria-label="Close imported file">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <textarea id="file-text" class="document-textarea" spellcheck="true"></textarea>
+                    <div class="file-editor-body">
+                        <textarea id="file-text" class="document-textarea" spellcheck="true"></textarea>
+                        <div id="pdf-preview" class="pdf-preview" hidden>
+                            <div class="pdf-preview-toolbar">
+                                <div class="pdf-page-navigation" aria-label="PDF page navigation">
+                                    <button id="previous-pdf-page" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Previous PDF page" aria-label="Previous PDF page">
+                                        <i class="bi bi-chevron-left"></i>
+                                    </button>
+                                    <span id="pdf-page-position">Page 1</span>
+                                    <button id="next-pdf-page" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Next PDF page" aria-label="Next PDF page">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                                <span id="pdf-preview-status" class="pdf-preview-status" role="status"></span>
+                            </div>
+                            <div id="pdf-canvas-shell" class="pdf-canvas-shell">
+                                <canvas id="pdf-canvas"></canvas>
+                            </div>
+                            <p class="pdf-preview-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Preview is read-only. Use Text to translate or edit imported content.</p>
+                        </div>
+                    </div>
                 </div>
 
                 <p id="file-import-message" class="file-import-message" role="status" hidden></p>
+            </div>
+            <div id="workspace-resize-handle" class="workspace-resize-handle" role="separator" aria-label="Resize workspace height" aria-orientation="horizontal" tabindex="0">
+                <span aria-hidden="true"></span>
             </div>
         </section>
 
@@ -302,6 +332,8 @@ GC releases managed memory. It does not close file handles, database connections
             const maxUploadSizeLabel = '@maxUploadSizeLabel';
             const translateEndpoint = '@Url.Action("Translate", "Translator")';
             const fileImportEndpoint = '@Url.Action("Import", "FileText")';
+            const pdfJsModuleUrl = '@Url.Content("~/lib/pdfjs/pdf.min.mjs")';
+            const pdfWorkerUrl = '@Url.Content("~/lib/pdfjs/pdf.worker.min.mjs")';
             const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
 
             const form = document.getElementById('translator-form');
@@ -322,6 +354,7 @@ GC releases managed memory. It does not close file handles, database connections
             const resetSample = document.getElementById('reset-sample');
             const selectionStatus = document.getElementById('selection-status');
             const workspaceGrid = document.querySelector('.workspace-grid');
+            const workspaceResizeHandle = document.getElementById('workspace-resize-handle');
             const historyPanel = document.getElementById('history-panel');
             const historyToggle = document.getElementById('history-toggle');
             const historyClose = document.getElementById('history-close');
@@ -341,6 +374,15 @@ GC releases managed memory. It does not close file handles, database connections
             const nextSegment = document.getElementById('next-segment');
             const segmentPosition = document.getElementById('segment-position');
             const clearFile = document.getElementById('clear-file');
+            const fileViewToggle = document.getElementById('file-view-toggle');
+            const fileViewButtons = document.querySelectorAll('[data-file-view]');
+            const pdfPreview = document.getElementById('pdf-preview');
+            const previousPdfPage = document.getElementById('previous-pdf-page');
+            const nextPdfPage = document.getElementById('next-pdf-page');
+            const pdfPagePosition = document.getElementById('pdf-page-position');
+            const pdfPreviewStatus = document.getElementById('pdf-preview-status');
+            const pdfCanvasShell = document.getElementById('pdf-canvas-shell');
+            const pdfCanvas = document.getElementById('pdf-canvas');
 
             let activeWorkspace = 'sample';
             let selectionTimer = 0;
@@ -351,6 +393,15 @@ GC releases managed memory. It does not close file handles, database connections
             let selectedFile = null;
             let fileDropDepth = 0;
             let isApplyingProgrammaticTextChange = false;
+            let importedPdfFile = null;
+            let pdfDocument = null;
+            let pdfLoadingTask = null;
+            let currentPdfPage = 1;
+            let isPdfPreviewActive = false;
+            let pdfRenderId = 0;
+            let pdfRenderTask = null;
+            let pdfResizeTimer = 0;
+            let workspaceResizeState = null;
 
             const replacementHistoryLimit = 20;
             const replacementHistories = new Map();
@@ -696,6 +747,12 @@ GC releases managed memory. It does not close file handles, database connections
                 historyPanel.hidden = !isOpen;
                 workspaceGrid.classList.toggle('is-history-open', isOpen);
                 historyToggle.setAttribute('aria-expanded', String(isOpen));
+
+                window.requestAnimationFrame(() => {
+                    if (fileEditor.classList.contains('is-split-view') && !canUseSplitFileView()) {
+                        setFileView('text');
+                    }
+                });
             }
 
             function showFileImportMessage(message, isError = false) {
@@ -726,6 +783,10 @@ GC releases managed memory. It does not close file handles, database connections
                 nextSegment.disabled = currentSegmentIndex === importedSegments.length - 1;
                 resetSelectionState();
                 updateUndoRedoControls();
+
+                if (isPdfPreviewActive && Number.isInteger(segment.sourcePage)) {
+                    void renderPdfPage(segment.sourcePage);
+                }
             }
 
             function resetPendingFile() {
@@ -739,6 +800,242 @@ GC releases managed memory. It does not close file handles, database connections
             function getFileExtension(fileName) {
                 const separator = fileName.lastIndexOf('.');
                 return separator === -1 ? '' : fileName.substring(separator + 1).toLowerCase();
+            }
+
+            function isPdfFile(file) {
+                return getFileExtension(file?.name ?? '') === 'pdf';
+            }
+
+            function setFileView(view) {
+                const canSplitFileView = canUseSplitFileView();
+                const selectedView = view === 'split' && !canSplitFileView ? 'text' : view;
+                const shouldShowPreview = (selectedView === 'preview' || selectedView === 'split') && importedPdfFile !== null;
+                const shouldShowSplit = selectedView === 'split' && shouldShowPreview;
+                isPdfPreviewActive = shouldShowPreview;
+                fileEditor.classList.toggle('is-split-view', shouldShowSplit);
+                fileText.hidden = shouldShowPreview && !shouldShowSplit;
+                pdfPreview.hidden = !shouldShowPreview;
+
+                fileViewButtons.forEach(button => {
+                    const isActive = button.dataset.fileView === (shouldShowPreview ? selectedView : 'text');
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-selected', String(isActive));
+                });
+
+                if (shouldShowPreview) {
+                    const segment = importedSegments[currentSegmentIndex];
+                    void renderPdfPage(segment?.sourcePage ?? currentPdfPage);
+                }
+            }
+
+            function canUseSplitFileView() {
+                return window.matchMedia('(min-width: 1200px)').matches && fileEditor.clientWidth >= 980;
+            }
+
+            function resetPdfPreview() {
+                pdfRenderId++;
+
+                try {
+                    pdfRenderTask?.cancel();
+                } catch {
+                    // The render task may already be complete.
+                }
+
+                try {
+                    pdfLoadingTask?.destroy();
+                } catch {
+                    // The loading task may already be settled.
+                }
+
+                try {
+                    pdfDocument?.destroy();
+                } catch {
+                    // The document may already be released.
+                }
+
+                importedPdfFile = null;
+                pdfDocument = null;
+                pdfLoadingTask = null;
+                pdfRenderTask = null;
+                currentPdfPage = 1;
+                isPdfPreviewActive = false;
+                pdfPreview.hidden = true;
+                pdfPreviewStatus.textContent = '';
+                pdfPagePosition.textContent = 'Page 1';
+                previousPdfPage.disabled = true;
+                nextPdfPage.disabled = true;
+                pdfCanvas.width = 0;
+                pdfCanvas.height = 0;
+            }
+
+            async function loadPdfDocument() {
+                if (pdfDocument) {
+                    return pdfDocument;
+                }
+
+                if (!importedPdfFile) {
+                    return null;
+                }
+
+                try {
+                    const pdfjs = await import(pdfJsModuleUrl);
+                    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+                    const fileData = new Uint8Array(await importedPdfFile.arrayBuffer());
+                    pdfLoadingTask = pdfjs.getDocument({ data: fileData });
+                    pdfDocument = await pdfLoadingTask.promise;
+                    return pdfDocument;
+                } catch {
+                    pdfPreviewStatus.textContent = 'Preview is unavailable for this PDF.';
+                    return null;
+                }
+            }
+
+            async function renderPdfPage(pageNumber) {
+                if (!isPdfPreviewActive) {
+                    return;
+                }
+
+                const renderId = ++pdfRenderId;
+                try {
+                    pdfRenderTask?.cancel();
+                } catch {
+                    // The render task may already be complete.
+                }
+                pdfPreviewStatus.textContent = 'Loading preview...';
+                const documentProxy = await loadPdfDocument();
+                if (!documentProxy || renderId !== pdfRenderId) {
+                    return;
+                }
+
+                const normalisedPage = Math.min(Math.max(Number(pageNumber) || 1, 1), documentProxy.numPages);
+
+                try {
+                    const page = await documentProxy.getPage(normalisedPage);
+                    if (renderId !== pdfRenderId) {
+                        return;
+                    }
+
+                    const baseViewport = page.getViewport({ scale: 1 });
+                    const availableWidth = Math.max(pdfCanvasShell.clientWidth - 36, 280);
+                    const displayScale = Math.min(1.75, Math.max(0.7, availableWidth / baseViewport.width));
+                    const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+                    const renderViewport = page.getViewport({ scale: displayScale * outputScale });
+                    const displayWidth = Math.floor(renderViewport.width / outputScale);
+                    const displayHeight = Math.floor(renderViewport.height / outputScale);
+                    const context = pdfCanvas.getContext('2d', { alpha: false });
+
+                    if (!context) {
+                        throw new Error('Canvas is unavailable.');
+                    }
+
+                    pdfCanvas.width = Math.ceil(renderViewport.width);
+                    pdfCanvas.height = Math.ceil(renderViewport.height);
+                    pdfCanvas.style.width = `${displayWidth}px`;
+                    pdfCanvas.style.height = `${displayHeight}px`;
+                    const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
+                    pdfRenderTask = renderTask;
+                    await renderTask.promise;
+
+                    if (renderId !== pdfRenderId) {
+                        return;
+                    }
+
+                    pdfRenderTask = null;
+                    currentPdfPage = normalisedPage;
+                    pdfPagePosition.textContent = `Page ${normalisedPage} of ${documentProxy.numPages}`;
+                    previousPdfPage.disabled = normalisedPage <= 1;
+                    nextPdfPage.disabled = normalisedPage >= documentProxy.numPages;
+                    pdfPreviewStatus.textContent = '';
+                } catch {
+                    if (renderId === pdfRenderId) {
+                        pdfRenderTask = null;
+                        pdfPreviewStatus.textContent = 'Preview is unavailable for this PDF.';
+                    }
+                }
+            }
+
+            function goToPdfPage(pageNumber) {
+                if (!isPdfPreviewActive) {
+                    return;
+                }
+
+                const segmentIndex = importedSegments.findIndex(segment => segment.sourcePage === pageNumber);
+                if (segmentIndex >= 0 && segmentIndex !== currentSegmentIndex) {
+                    syncCurrentFileSegment();
+                    currentSegmentIndex = segmentIndex;
+                    renderCurrentSegment();
+                    return;
+                }
+
+                void renderPdfPage(pageNumber);
+            }
+
+            function workspaceResizeBounds() {
+                const minimum = 440;
+                const maximum = Math.max(minimum + 120, Math.floor(window.innerHeight * 0.78));
+                return { minimum, maximum };
+            }
+
+            function resizeWorkspace(height) {
+                const { minimum, maximum } = workspaceResizeBounds();
+                const nextHeight = Math.min(Math.max(Math.round(height), minimum), maximum);
+                workspaceGrid.style.height = `${nextHeight}px`;
+            }
+
+            function expandImportedWorkspace() {
+                if (!window.matchMedia('(min-width: 901px) and (min-height: 820px)').matches || workspaceGrid.style.height) {
+                    return;
+                }
+
+                resizeWorkspace(window.innerHeight * 0.68);
+            }
+
+            function beginWorkspaceResize(event) {
+                if (event.button !== undefined && event.button !== 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                workspaceResizeState = {
+                    pointerId: event.pointerId,
+                    startHeight: workspaceGrid.getBoundingClientRect().height,
+                    startY: event.clientY
+                };
+                workspaceResizeHandle.setPointerCapture(event.pointerId);
+            }
+
+            function resizeWorkspaceFromPointer(event) {
+                if (!workspaceResizeState || workspaceResizeState.pointerId !== event.pointerId) {
+                    return;
+                }
+
+                resizeWorkspace(workspaceResizeState.startHeight + event.clientY - workspaceResizeState.startY);
+            }
+
+            function endWorkspaceResize(event) {
+                if (!workspaceResizeState || workspaceResizeState.pointerId !== event.pointerId) {
+                    return;
+                }
+
+                workspaceResizeHandle.releasePointerCapture(event.pointerId);
+                workspaceResizeState = null;
+            }
+
+            function resizeWorkspaceFromKeyboard(event) {
+                const currentHeight = workspaceGrid.getBoundingClientRect().height;
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    resizeWorkspace(currentHeight - 48);
+                } else if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    resizeWorkspace(currentHeight + 48);
+                } else if (event.key === 'Home') {
+                    event.preventDefault();
+                    resizeWorkspace(workspaceResizeBounds().minimum);
+                } else if (event.key === 'End') {
+                    event.preventDefault();
+                    resizeWorkspace(workspaceResizeBounds().maximum);
+                }
             }
 
             function setSelectedFile(file) {
@@ -774,11 +1071,15 @@ GC releases managed memory. It does not close file handles, database connections
             function resetImportedFile() {
                 resetPendingFile();
                 removeDropState();
+                resetPdfPreview();
                 importedSegments = [];
                 importedPageCount = null;
                 currentSegmentIndex = 0;
                 clearReplacementHistories();
                 fileText.value = '';
+                fileText.hidden = false;
+                fileEditor.classList.remove('is-split-view');
+                fileViewToggle.hidden = true;
                 fileEditor.hidden = true;
                 fileUpload.hidden = false;
                 showFileImportMessage('');
@@ -819,9 +1120,15 @@ GC releases managed memory. It does not close file handles, database connections
                     importedPageCount = Number.isInteger(result.pageCount) ? result.pageCount : null;
                     currentSegmentIndex = 0;
                     importedFileName.textContent = result.fileName || file.name;
+                    resetPdfPreview();
+                    importedPdfFile = isPdfFile(file) ? file : null;
+                    fileViewToggle.hidden = importedPdfFile === null;
+                    fileText.hidden = false;
                     resetPendingFile();
                     fileUpload.hidden = true;
                     fileEditor.hidden = false;
+                    expandImportedWorkspace();
+                    setFileView(importedPdfFile && canUseSplitFileView() ? 'split' : 'text');
                     renderCurrentSegment();
                 } catch {
                     showFileImportMessage('The file could not be imported. Please try again.', true);
@@ -900,6 +1207,16 @@ GC releases managed memory. It does not close file handles, database connections
                 button.addEventListener('click', () => setActiveWorkspace(button.dataset.workspaceTab));
             });
 
+            fileViewButtons.forEach(button => {
+                button.addEventListener('click', () => setFileView(button.dataset.fileView));
+            });
+
+            workspaceResizeHandle.addEventListener('pointerdown', beginWorkspaceResize);
+            workspaceResizeHandle.addEventListener('pointermove', resizeWorkspaceFromPointer);
+            workspaceResizeHandle.addEventListener('pointerup', endWorkspaceResize);
+            workspaceResizeHandle.addEventListener('pointercancel', endWorkspaceResize);
+            workspaceResizeHandle.addEventListener('keydown', resizeWorkspaceFromKeyboard);
+
             historyToggle.addEventListener('click', () => setHistoryOpen(historyPanel.hidden));
             historyClose.addEventListener('click', () => setHistoryOpen(false));
 
@@ -963,6 +1280,19 @@ GC releases managed memory. It does not close file handles, database connections
                 }
             });
             clearFile.addEventListener('click', resetImportedFile);
+            previousPdfPage.addEventListener('click', () => goToPdfPage(currentPdfPage - 1));
+            nextPdfPage.addEventListener('click', () => goToPdfPage(currentPdfPage + 1));
+            window.addEventListener('resize', () => {
+                window.clearTimeout(pdfResizeTimer);
+                if (fileEditor.classList.contains('is-split-view') && !canUseSplitFileView()) {
+                    setFileView('text');
+                }
+                if (!isPdfPreviewActive) {
+                    return;
+                }
+
+                pdfResizeTimer = window.setTimeout(() => void renderPdfPage(currentPdfPage), 160);
+            });
 
             clearHistory.addEventListener('click', () => {
                 localStorage.removeItem(historyKey);

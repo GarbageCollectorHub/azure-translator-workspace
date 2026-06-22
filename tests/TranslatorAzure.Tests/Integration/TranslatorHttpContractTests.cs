@@ -126,6 +126,37 @@ public sealed class TranslatorHttpContractTests : IClassFixture<TranslatorApplic
     }
 
     [Fact]
+    public async Task TranslatorPage_ProvidesThePdfPreviewWorkspace()
+    {
+        _factory.ResetTranslator();
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/Translator");
+
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("id=\"pdf-preview\"", html, StringComparison.Ordinal);
+        Assert.Contains("/lib/pdfjs/pdf.min.mjs", html, StringComparison.Ordinal);
+        Assert.Contains("Original PDF", html, StringComparison.Ordinal);
+        Assert.Contains("data-file-view=\"split\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"workspace-resize-handle\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/lib/pdfjs/pdf.min.mjs")]
+    [InlineData("/lib/pdfjs/pdf.worker.min.mjs")]
+    public async Task PdfPreviewAssets_AreServedByTheApplication(string assetPath)
+    {
+        _factory.ResetTranslator();
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync(assetPath);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("text/javascript", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task FileImportEndpoint_RejectsUnsupportedFileType()
     {
         _factory.ResetTranslator();
