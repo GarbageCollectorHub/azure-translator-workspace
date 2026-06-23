@@ -136,6 +136,8 @@ public sealed class TranslatorHttpContractTests : IClassFixture<TranslatorApplic
         response.EnsureSuccessStatusCode();
         var html = await response.Content.ReadAsStringAsync();
         Assert.Contains("id=\"pdf-preview\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"pdf-text-layer\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"pdf-selection-popover\"", html, StringComparison.Ordinal);
         Assert.Contains("/lib/pdfjs/pdf.min.mjs", html, StringComparison.Ordinal);
         Assert.Contains("Original PDF", html, StringComparison.Ordinal);
         Assert.Contains("data-file-view=\"split\"", html, StringComparison.Ordinal);

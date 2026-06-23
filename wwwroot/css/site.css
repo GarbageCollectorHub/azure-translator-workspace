@@ -800,12 +800,115 @@ textarea:focus-visible {
   background: #eef1f5;
 }
 
-.pdf-canvas-shell canvas {
+.pdf-page-stage {
+  position: relative;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+.pdf-page-stage canvas {
   display: block;
   max-width: 100%;
   height: auto;
-  border: 1px solid var(--border-strong);
+  outline: 1px solid var(--border-strong);
   background: #ffffff;
+}
+
+.pdf-text-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: clip;
+  color: transparent;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+  user-select: text;
+  forced-color-adjust: none;
+  caret-color: CanvasText;
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+/* PDF.js provides the per-item values. Applying all of them is required for
+   selection geometry to follow the original PDF font metrics and transforms. */
+.pdf-text-layer span:not(.markedContent) {
+  font-size: calc(var(--font-height) * var(--total-scale-factor));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1));
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
+}
+
+.pdf-text-layer ::selection {
+  color: transparent;
+  background: rgba(37, 99, 235, 0.34);
+}
+
+.pdf-selection-popover {
+  position: fixed;
+  z-index: 30;
+  width: min(320px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(23, 32, 51, 0.14);
+}
+
+.pdf-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pdf-selection-translate {
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+}
+
+.pdf-selection-translate i {
+  margin-right: 4px;
+}
+
+.pdf-selection-actions .toolbar-icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+.pdf-selection-result {
+  max-height: 132px;
+  margin: 7px 2px 1px;
+  padding: 7px 8px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .pdf-preview-note {

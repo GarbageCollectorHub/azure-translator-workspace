@@ -279,9 +279,27 @@ GC releases managed memory. It does not close file handles, database connections
                                 <span id="pdf-preview-status" class="pdf-preview-status" role="status"></span>
                             </div>
                             <div id="pdf-canvas-shell" class="pdf-canvas-shell">
-                                <canvas id="pdf-canvas"></canvas>
+                                <div id="pdf-page-stage" class="pdf-page-stage">
+                                    <canvas id="pdf-canvas"></canvas>
+                                    <div id="pdf-text-layer" class="pdf-text-layer textLayer" aria-label="Selectable text in PDF preview"></div>
+                                </div>
                             </div>
-                            <p class="pdf-preview-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Preview is read-only. Use Text to translate or edit imported content.</p>
+                            <div id="pdf-selection-popover" class="pdf-selection-popover" role="dialog" aria-label="Selected PDF text" hidden>
+                                <div class="pdf-selection-actions" role="toolbar" aria-label="Selected text actions">
+                                    <button id="translate-pdf-selection" class="btn btn-primary pdf-selection-translate" type="button">
+                                        <i class="bi bi-translate" aria-hidden="true"></i>
+                                        <span>Translate</span>
+                                    </button>
+                                    <button id="copy-pdf-selection" class="btn toolbar-icon-button" type="button" title="Copy selected text" aria-label="Copy selected text">
+                                        <i class="bi bi-copy" aria-hidden="true"></i>
+                                    </button>
+                                    <button id="close-pdf-selection" class="btn toolbar-icon-button" type="button" title="Close selected text actions" aria-label="Close selected text actions">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <p id="pdf-selection-result" class="pdf-selection-result" role="status" hidden></p>
+                            </div>
+                            <p class="pdf-preview-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Preview keeps the original layout and images. Text selection and translation work only where the PDF contains selectable text.</p>
                         </div>
                     </div>
                 </div>
@@ -382,7 +400,14 @@ GC releases managed memory. It does not close file handles, database connections
             const pdfPagePosition = document.getElementById('pdf-page-position');
             const pdfPreviewStatus = document.getElementById('pdf-preview-status');
             const pdfCanvasShell = document.getElementById('pdf-canvas-shell');
+            const pdfPageStage = document.getElementById('pdf-page-stage');
             const pdfCanvas = document.getElementById('pdf-canvas');
+            const pdfTextLayer = document.getElementById('pdf-text-layer');
+            const pdfSelectionPopover = document.getElementById('pdf-selection-popover');
+            const translatePdfSelectionButton = document.getElementById('translate-pdf-selection');
+            const copyPdfSelectionButton = document.getElementById('copy-pdf-selection');
+            const closePdfSelectionButton = document.getElementById('close-pdf-selection');
+            const pdfSelectionResult = document.getElementById('pdf-selection-result');
 
             let activeWorkspace = 'sample';
             let selectionTimer = 0;
@@ -402,8 +427,16 @@ GC releases managed memory. It does not close file handles, database connections
             let pdfRenderTask = null;
             let pdfResizeTimer = 0;
             let workspaceResizeState = null;
+            let pdfJs = null;
+            let activePdfSelectionText = '';
+            let isPdfPointerSelectionActive = false;
+            let pdfPointerSelectionFrame = 0;
+            let pdfPointerSelectionPosition = null;
+            let pdfPointerSelectionAnchor = null;
+            let activePdfSelectionRect = null;
 
             const replacementHistoryLimit = 20;
+            const pdfSelectionPointerTolerance = 48;
             const replacementHistories = new Map();
 
             const initialInput = @Json.Serialize(Model.FormModel?.Text ?? "");
@@ -640,6 +673,36 @@ GC releases managed memory. It does not close file handles, database connections
                 selectionStatus.textContent = message;
             }
 
+            async function requestTranslation(text) {
+                const response = await fetch(translateEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': antiForgeryToken
+                    },
+                    body: JSON.stringify({
+                        text,
+                        languageFrom: sourceLanguage.value,
+                        languageTo: targetLanguage.value
+                    })
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.status?.isOk) {
+                    throw new Error(result.data?.message || result.status?.phrase || 'Translation unavailable');
+                }
+
+                const output = result.data?.text ?? '';
+                if (!output) {
+                    throw new Error('Translation unavailable');
+                }
+
+                return {
+                    text: output,
+                    detectedLanguage: result.data?.detectedLanguage
+                };
+            }
+
             async function translateSelection(force = false) {
                 const textArea = activeTextArea();
                 if (!translateSelected.checked || (!force && document.activeElement !== textArea)) {
@@ -669,30 +732,8 @@ GC releases managed memory. It does not close file handles, database connections
                 setSelectionStatus('Translating...');
 
                 try {
-                    const response = await fetch(translateEndpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'RequestVerificationToken': antiForgeryToken
-                        },
-                        body: JSON.stringify({
-                            text: selectedText,
-                            languageFrom: sourceLanguage.value,
-                            languageTo: targetLanguage.value
-                        })
-                    });
-                    const result = await response.json();
-
-                    if (!response.ok || !result.status?.isOk) {
-                        setSelectionStatus(result.data?.message || result.status?.phrase || 'Translation unavailable');
-                        return;
-                    }
-
-                    const output = result.data?.text ?? '';
-                    if (!output) {
-                        setSelectionStatus('Translation unavailable');
-                        return;
-                    }
+                    const result = await requestTranslation(selectedText);
+                    const output = result.text;
 
                     if (replaceSelected.checked) {
                         const beforeText = textArea.value;
@@ -710,10 +751,10 @@ GC releases managed memory. It does not close file handles, database connections
                         showToast(output);
                     }
 
-                    addHistory(selectedText, output, result.data?.detectedLanguage);
+                    addHistory(selectedText, output, result.detectedLanguage);
                     setSelectionStatus('');
-                } catch {
-                    setSelectionStatus('Translation unavailable');
+                } catch (error) {
+                    setSelectionStatus(error instanceof Error ? error.message : 'Translation unavailable');
                 }
             }
 
@@ -834,6 +875,7 @@ GC releases managed memory. It does not close file handles, database connections
 
             function resetPdfPreview() {
                 pdfRenderId++;
+                hidePdfSelectionPopover();
 
                 try {
                     pdfRenderTask?.cancel();
@@ -866,6 +908,20 @@ GC releases managed memory. It does not close file handles, database connections
                 nextPdfPage.disabled = true;
                 pdfCanvas.width = 0;
                 pdfCanvas.height = 0;
+                pdfCanvas.style.width = '';
+                pdfCanvas.style.height = '';
+                pdfPageStage.style.width = '';
+                pdfPageStage.style.height = '';
+                pdfTextLayer.replaceChildren();
+            }
+
+            async function loadPdfJs() {
+                if (!pdfJs) {
+                    pdfJs = await import(pdfJsModuleUrl);
+                    pdfJs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+                }
+
+                return pdfJs;
             }
 
             async function loadPdfDocument() {
@@ -878,8 +934,7 @@ GC releases managed memory. It does not close file handles, database connections
                 }
 
                 try {
-                    const pdfjs = await import(pdfJsModuleUrl);
-                    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+                    const pdfjs = await loadPdfJs();
                     const fileData = new Uint8Array(await importedPdfFile.arrayBuffer());
                     pdfLoadingTask = pdfjs.getDocument({ data: fileData });
                     pdfDocument = await pdfLoadingTask.promise;
@@ -888,6 +943,305 @@ GC releases managed memory. It does not close file handles, database connections
                     pdfPreviewStatus.textContent = 'Preview is unavailable for this PDF.';
                     return null;
                 }
+            }
+
+            function isPdfTextNode(node) {
+                const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+                return Boolean(element && pdfTextLayer.contains(element));
+            }
+
+            function getPdfTextSpan(node) {
+                const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+                return element?.closest?.('.pdf-text-layer span:not(.markedContent)') ?? null;
+            }
+
+            function beginPdfPointerSelection(event) {
+                if (event.button !== 0) {
+                    return;
+                }
+
+                const anchorSpan = getPdfTextSpan(event.target)
+                    ?? findClosestPdfTextSpan(event.clientX, event.clientY);
+                const anchorNode = anchorSpan?.firstChild;
+                const selection = window.getSelection();
+
+                if (!anchorNode || !selection || typeof selection.setBaseAndExtent !== 'function') {
+                    isPdfPointerSelectionActive = false;
+                    pdfPointerSelectionAnchor = null;
+                    return;
+                }
+
+                // PDF.js spans have gaps between glyphs. Anchor the drag to the nearest text span
+                // so a small miss beside a line cannot reuse an old browser selection range.
+                event.preventDefault();
+                isPdfPointerSelectionActive = true;
+                pdfPointerSelectionAnchor = {
+                    node: anchorNode,
+                    offset: getPdfTextOffsetAtPointer(anchorSpan, event.clientX, event.clientY)
+                };
+                selection.removeAllRanges();
+                selection.setBaseAndExtent(
+                    pdfPointerSelectionAnchor.node,
+                    pdfPointerSelectionAnchor.offset,
+                    pdfPointerSelectionAnchor.node,
+                    pdfPointerSelectionAnchor.offset);
+                hidePdfSelectionPopover();
+            }
+
+            function distanceToPdfTextRect(rect, clientX, clientY) {
+                const horizontalDistance = Math.max(rect.left - clientX, 0, clientX - rect.right);
+                const verticalDistance = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+                return Math.hypot(horizontalDistance, verticalDistance);
+            }
+
+            function findClosestPdfTextSpan(clientX, clientY) {
+                let closest = null;
+
+                for (const span of pdfTextLayer.querySelectorAll('span:not(.markedContent)')) {
+                    if (!span.textContent?.trim()) {
+                        continue;
+                    }
+
+                    const distance = distanceToPdfTextRect(span.getBoundingClientRect(), clientX, clientY);
+                    if (!closest || distance < closest.distance) {
+                        closest = { span, distance };
+                    }
+                }
+
+                return closest?.distance <= pdfSelectionPointerTolerance ? closest.span : null;
+            }
+
+            function getPdfTextOffsetAtPointer(span, clientX, clientY) {
+                const caretPosition = document.caretPositionFromPoint?.(clientX, clientY);
+                if (caretPosition?.offsetNode && span.contains(caretPosition.offsetNode)) {
+                    return caretPosition.offset;
+                }
+
+                const caretRange = document.caretRangeFromPoint?.(clientX, clientY);
+                if (caretRange?.startContainer && span.contains(caretRange.startContainer)) {
+                    return caretRange.startOffset;
+                }
+
+                const rect = span.getBoundingClientRect();
+                return clientX < rect.left + rect.width / 2 ? 0 : span.textContent.length;
+            }
+
+            function normalisePdfSelectionEndpoint(event) {
+                if (!isPdfPointerSelectionActive || !pdfPointerSelectionAnchor) {
+                    return false;
+                }
+
+                const selection = window.getSelection();
+                if (!selection || typeof selection.setBaseAndExtent !== 'function') {
+                    return false;
+                }
+
+                const endpointSpan = findClosestPdfTextSpan(event.clientX, event.clientY);
+                const endpointNode = endpointSpan?.firstChild;
+                if (!endpointNode) {
+                    return false;
+                }
+
+                selection.setBaseAndExtent(
+                    pdfPointerSelectionAnchor.node,
+                    pdfPointerSelectionAnchor.offset,
+                    endpointNode,
+                    getPdfTextOffsetAtPointer(endpointSpan, event.clientX, event.clientY));
+                return true;
+            }
+
+            function updatePdfPointerSelection(event) {
+                if (!isPdfPointerSelectionActive || (event.buttons & 1) === 0) {
+                    return;
+                }
+
+                pdfPointerSelectionPosition = {
+                    clientX: event.clientX,
+                    clientY: event.clientY
+                };
+
+                if (pdfPointerSelectionFrame) {
+                    return;
+                }
+
+                pdfPointerSelectionFrame = window.requestAnimationFrame(() => {
+                    pdfPointerSelectionFrame = 0;
+
+                    if (!isPdfPointerSelectionActive || !pdfPointerSelectionPosition) {
+                        return;
+                    }
+
+                    // Browser selection can fall through absolutely positioned PDF spans into distant DOM text.
+                    // Keep the endpoint beside the actual pointer while the user is dragging.
+                    normalisePdfSelectionEndpoint(pdfPointerSelectionPosition);
+                });
+            }
+
+            function finishPdfPointerSelection(event) {
+                const releasedInsidePopover = pdfSelectionPopover.contains(event.target);
+                const didNormalise = normalisePdfSelectionEndpoint(event);
+                isPdfPointerSelectionActive = false;
+                pdfPointerSelectionPosition = null;
+                pdfPointerSelectionAnchor = null;
+
+                if (pdfPointerSelectionFrame) {
+                    window.cancelAnimationFrame(pdfPointerSelectionFrame);
+                    pdfPointerSelectionFrame = 0;
+                }
+
+                if (!releasedInsidePopover && (didNormalise || getPdfTextSelection())) {
+                    schedulePdfSelectionPopover();
+                }
+            }
+
+            function getPdfTextSelection() {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed || selection.rangeCount === 0
+                    || !isPdfTextNode(selection.anchorNode) || !isPdfTextNode(selection.focusNode)) {
+                    return null;
+                }
+
+                const text = selection.toString().replace(/\s+/g, ' ').trim();
+                if (text.length < 2) {
+                    return null;
+                }
+
+                const range = selection.getRangeAt(0);
+                const rect = Array.from(range.getClientRects()).find(candidate => candidate.width > 0 && candidate.height > 0)
+                    ?? range.getBoundingClientRect();
+
+                return rect.width > 0 && rect.height > 0 ? { text, rect } : null;
+            }
+
+            function hidePdfSelectionPopover(clearBrowserSelection = false) {
+                activePdfSelectionText = '';
+                activePdfSelectionRect = null;
+                pdfSelectionPopover.hidden = true;
+                pdfSelectionResult.hidden = true;
+                pdfSelectionResult.textContent = '';
+
+                if (clearBrowserSelection) {
+                    window.getSelection()?.removeAllRanges();
+                }
+            }
+
+            function showPdfSelectionPopover(selection) {
+                activePdfSelectionText = selection.text;
+                activePdfSelectionRect = selection.rect;
+                pdfSelectionResult.hidden = true;
+                pdfSelectionResult.textContent = '';
+                pdfSelectionPopover.hidden = false;
+
+                positionPdfSelectionPopover();
+            }
+
+            function positionPdfSelectionPopover() {
+                if (!activePdfSelectionRect || pdfSelectionPopover.hidden) {
+                    return;
+                }
+
+                const margin = 12;
+                const preferredTop = activePdfSelectionRect.bottom + 10;
+                const maxLeft = window.innerWidth - pdfSelectionPopover.offsetWidth - margin;
+                const maxTop = window.innerHeight - pdfSelectionPopover.offsetHeight - margin;
+                const topAbove = activePdfSelectionRect.top - pdfSelectionPopover.offsetHeight - 10;
+                const left = Math.max(margin, Math.min(activePdfSelectionRect.left, maxLeft));
+                const top = preferredTop <= maxTop
+                    ? preferredTop
+                    : Math.max(margin, topAbove);
+
+                pdfSelectionPopover.style.left = `${left}px`;
+                pdfSelectionPopover.style.top = `${top}px`;
+            }
+
+            function schedulePdfSelectionPopover() {
+                window.setTimeout(() => {
+                    const selection = getPdfTextSelection();
+                    if (!selection) {
+                        hidePdfSelectionPopover();
+                        return;
+                    }
+
+                    if (selection.text.length > maxSelectionLength) {
+                        hidePdfSelectionPopover();
+                        pdfPreviewStatus.textContent = `Select up to ${maxSelectionLength.toLocaleString()} characters at a time.`;
+                        return;
+                    }
+
+                    pdfPreviewStatus.textContent = '';
+                    showPdfSelectionPopover(selection);
+                }, 0);
+            }
+
+            async function copyText(text) {
+                if (!text) {
+                    return false;
+                }
+
+                try {
+                    if (!navigator.clipboard?.writeText) {
+                        throw new Error('Clipboard API is unavailable.');
+                    }
+
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch {
+                    const fallback = document.createElement('textarea');
+                    fallback.value = text;
+                    fallback.setAttribute('readonly', '');
+                    fallback.style.position = 'fixed';
+                    fallback.style.opacity = '0';
+                    document.body.appendChild(fallback);
+                    fallback.select();
+                    const copied = document.execCommand('copy');
+                    fallback.remove();
+                    return copied;
+                }
+            }
+
+            async function translatePdfSelection() {
+                if (!activePdfSelectionText || activePdfSelectionText.length > maxSelectionLength) {
+                    return;
+                }
+
+                translatePdfSelectionButton.disabled = true;
+                pdfSelectionResult.hidden = false;
+                pdfSelectionResult.textContent = 'Translating...';
+                positionPdfSelectionPopover();
+
+                try {
+                    const result = await requestTranslation(activePdfSelectionText);
+                    pdfSelectionResult.textContent = result.text;
+                    addHistory(activePdfSelectionText, result.text, result.detectedLanguage);
+                } catch (error) {
+                    pdfSelectionResult.textContent = error instanceof Error ? error.message : 'Translation unavailable';
+                } finally {
+                    translatePdfSelectionButton.disabled = false;
+                    positionPdfSelectionPopover();
+                }
+            }
+
+            async function renderPdfTextLayer(page, viewport, renderId) {
+                pdfTextLayer.replaceChildren();
+                const textContent = await page.getTextContent();
+
+                if (renderId !== pdfRenderId) {
+                    return false;
+                }
+
+                if (!textContent.items.some(item => item.str?.trim())) {
+                    pdfPreviewStatus.textContent = 'No selectable text found on this page.';
+                    return false;
+                }
+
+                const pdfjs = await loadPdfJs();
+                const textLayer = new pdfjs.TextLayer({
+                    textContentSource: textContent,
+                    container: pdfTextLayer,
+                    viewport
+                });
+                await textLayer.render();
+                return renderId === pdfRenderId;
             }
 
             async function renderPdfPage(pageNumber) {
@@ -919,20 +1273,32 @@ GC releases managed memory. It does not close file handles, database connections
                     const availableWidth = Math.max(pdfCanvasShell.clientWidth - 36, 280);
                     const displayScale = Math.min(1.75, Math.max(0.7, availableWidth / baseViewport.width));
                     const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-                    const renderViewport = page.getViewport({ scale: displayScale * outputScale });
-                    const displayWidth = Math.floor(renderViewport.width / outputScale);
-                    const displayHeight = Math.floor(renderViewport.height / outputScale);
+                    const displayViewport = page.getViewport({ scale: displayScale });
+                    const displayWidth = Math.floor(displayViewport.width);
+                    const displayHeight = Math.floor(displayViewport.height);
                     const context = pdfCanvas.getContext('2d', { alpha: false });
 
                     if (!context) {
                         throw new Error('Canvas is unavailable.');
                     }
 
-                    pdfCanvas.width = Math.ceil(renderViewport.width);
-                    pdfCanvas.height = Math.ceil(renderViewport.height);
+                    pdfCanvas.width = Math.ceil(displayViewport.width * outputScale);
+                    pdfCanvas.height = Math.ceil(displayViewport.height * outputScale);
                     pdfCanvas.style.width = `${displayWidth}px`;
                     pdfCanvas.style.height = `${displayHeight}px`;
-                    const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
+                    pdfPageStage.style.width = `${displayWidth}px`;
+                    pdfPageStage.style.height = `${displayHeight}px`;
+                    pdfTextLayer.style.width = `${displayWidth}px`;
+                    pdfTextLayer.style.height = `${displayHeight}px`;
+                    pdfTextLayer.style.setProperty('--total-scale-factor', String(displayViewport.scale));
+                    pdfTextLayer.replaceChildren();
+                    // Canvas uses a high-DPI transform while TextLayer keeps the same viewport as the visible page.
+                    // This keeps text selection coordinates aligned with the rendered PDF at every display scale.
+                    const renderTask = page.render({
+                        canvasContext: context,
+                        transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0],
+                        viewport: displayViewport
+                    });
                     pdfRenderTask = renderTask;
                     await renderTask.promise;
 
@@ -945,7 +1311,15 @@ GC releases managed memory. It does not close file handles, database connections
                     pdfPagePosition.textContent = `Page ${normalisedPage} of ${documentProxy.numPages}`;
                     previousPdfPage.disabled = normalisedPage <= 1;
                     nextPdfPage.disabled = normalisedPage >= documentProxy.numPages;
-                    pdfPreviewStatus.textContent = '';
+                    try {
+                        const renderedTextLayer = await renderPdfTextLayer(page, displayViewport, renderId);
+                        if (renderedTextLayer) {
+                            pdfPreviewStatus.textContent = 'Select text in the preview to translate it.';
+                        }
+                    } catch {
+                        pdfTextLayer.replaceChildren();
+                        pdfPreviewStatus.textContent = 'Preview loaded, but selectable text is unavailable on this page.';
+                    }
                 } catch {
                     if (renderId === pdfRenderId) {
                         pdfRenderTask = null;
@@ -1208,7 +1582,10 @@ GC releases managed memory. It does not close file handles, database connections
             });
 
             fileViewButtons.forEach(button => {
-                button.addEventListener('click', () => setFileView(button.dataset.fileView));
+                button.addEventListener('click', () => {
+                    hidePdfSelectionPopover(true);
+                    setFileView(button.dataset.fileView);
+                });
             });
 
             workspaceResizeHandle.addEventListener('pointerdown', beginWorkspaceResize);
@@ -1282,7 +1659,29 @@ GC releases managed memory. It does not close file handles, database connections
             clearFile.addEventListener('click', resetImportedFile);
             previousPdfPage.addEventListener('click', () => goToPdfPage(currentPdfPage - 1));
             nextPdfPage.addEventListener('click', () => goToPdfPage(currentPdfPage + 1));
+            pdfTextLayer.addEventListener('mousedown', beginPdfPointerSelection);
+            document.addEventListener('mousemove', updatePdfPointerSelection);
+            pdfTextLayer.addEventListener('keyup', event => {
+                if (event.key === 'Shift' || event.key.startsWith('Arrow')) {
+                    schedulePdfSelectionPopover();
+                }
+            });
+            translatePdfSelectionButton.addEventListener('click', translatePdfSelection);
+            copyPdfSelectionButton.addEventListener('click', async () => {
+                const copied = await copyText(activePdfSelectionText);
+                pdfPreviewStatus.textContent = copied ? 'Selected text copied.' : 'Copy is unavailable. Select the text and use Ctrl+C.';
+            });
+            closePdfSelectionButton.addEventListener('click', () => hidePdfSelectionPopover(true));
+            pdfCanvasShell.addEventListener('scroll', () => hidePdfSelectionPopover());
+            document.addEventListener('selectionchange', () => {
+                const hasPopoverFocus = pdfSelectionPopover.contains(document.activeElement);
+                if (!getPdfTextSelection() && !hasPopoverFocus) {
+                    hidePdfSelectionPopover();
+                }
+            });
+            document.addEventListener('mouseup', finishPdfPointerSelection);
             window.addEventListener('resize', () => {
+                hidePdfSelectionPopover();
                 window.clearTimeout(pdfResizeTimer);
                 if (fileEditor.classList.contains('is-split-view') && !canUseSplitFileView()) {
                     setFileView('text');
