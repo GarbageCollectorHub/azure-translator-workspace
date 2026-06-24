@@ -286,6 +286,7 @@ GC releases managed memory. It does not close file handles, database connections
                             </div>
                             <div id="pdf-selection-popover" class="pdf-selection-popover" role="dialog" aria-label="Selected PDF text" hidden>
                                 <div class="pdf-selection-actions" role="toolbar" aria-label="Selected text actions">
+                                    <span id="pdf-selection-card-title" class="pdf-selection-card-title" hidden>Translation</span>
                                     <button id="translate-pdf-selection" class="btn btn-primary pdf-selection-translate" type="button">
                                         <i class="bi bi-translate" aria-hidden="true"></i>
                                         <span>Translate</span>
@@ -293,10 +294,17 @@ GC releases managed memory. It does not close file handles, database connections
                                     <button id="copy-pdf-selection" class="btn toolbar-icon-button" type="button" title="Copy selected text" aria-label="Copy selected text">
                                         <i class="bi bi-copy" aria-hidden="true"></i>
                                     </button>
+                                    <button id="expand-pdf-selection" class="btn toolbar-icon-button pdf-selection-expand" type="button" title="Expand translation" aria-label="Expand translation" aria-expanded="false">
+                                        <i class="bi bi-arrows-angle-expand" aria-hidden="true"></i>
+                                    </button>
+                                    <button id="reset-pdf-selection-layout" class="btn toolbar-icon-button" type="button" title="Restore default card size and position" aria-label="Restore default card size and position" hidden>
+                                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                                    </button>
                                     <button id="close-pdf-selection" class="btn toolbar-icon-button" type="button" title="Close selected text actions" aria-label="Close selected text actions">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i>
                                     </button>
                                 </div>
+                                <p id="pdf-selection-source" class="pdf-selection-source" hidden></p>
                                 <p id="pdf-selection-result" class="pdf-selection-result" role="status" hidden></p>
                             </div>
                             <p class="pdf-preview-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Preview keeps the original layout and images. Text selection and translation work only where the PDF contains selectable text.</p>
@@ -404,9 +412,14 @@ GC releases managed memory. It does not close file handles, database connections
             const pdfCanvas = document.getElementById('pdf-canvas');
             const pdfTextLayer = document.getElementById('pdf-text-layer');
             const pdfSelectionPopover = document.getElementById('pdf-selection-popover');
+            const pdfSelectionActions = document.querySelector('.pdf-selection-actions');
+            const pdfSelectionCardTitle = document.getElementById('pdf-selection-card-title');
             const translatePdfSelectionButton = document.getElementById('translate-pdf-selection');
             const copyPdfSelectionButton = document.getElementById('copy-pdf-selection');
+            const expandPdfSelectionButton = document.getElementById('expand-pdf-selection');
+            const resetPdfSelectionLayoutButton = document.getElementById('reset-pdf-selection-layout');
             const closePdfSelectionButton = document.getElementById('close-pdf-selection');
+            const pdfSelectionSource = document.getElementById('pdf-selection-source');
             const pdfSelectionResult = document.getElementById('pdf-selection-result');
 
             let activeWorkspace = 'sample';
@@ -434,9 +447,17 @@ GC releases managed memory. It does not close file handles, database connections
             let pdfPointerSelectionPosition = null;
             let pdfPointerSelectionAnchor = null;
             let activePdfSelectionRect = null;
+            let activePdfTranslationText = '';
+            let pdfSelectionCardDrag = null;
 
             const replacementHistoryLimit = 20;
             const pdfSelectionPointerTolerance = 48;
+            const pdfSelectionCardLayoutKey = 'azure-translator-pdf-selection-card-layout-v1';
+            const pdfSelectionCardViewportMargin = 16;
+            const pdfSelectionCardDefaultWidth = 500;
+            const pdfSelectionCardDefaultHeight = 320;
+            const pdfSelectionCardMinimumWidth = 360;
+            const pdfSelectionCardMinimumHeight = 220;
             const replacementHistories = new Map();
 
             const initialInput = @Json.Serialize(Model.FormModel?.Text ?? "");
@@ -985,7 +1006,12 @@ GC releases managed memory. It does not close file handles, database connections
                     pdfPointerSelectionAnchor.offset,
                     pdfPointerSelectionAnchor.node,
                     pdfPointerSelectionAnchor.offset);
-                hidePdfSelectionPopover();
+
+                // A compact helper follows the current selection. The expanded card is user-owned
+                // and must stay open while a new PDF fragment is being selected.
+                if (!isPdfSelectionCardExpanded()) {
+                    hidePdfSelectionPopover();
+                }
             }
 
             function distanceToPdfTextRect(rect, clientX, clientY) {
@@ -1115,7 +1141,9 @@ GC releases managed memory. It does not close file handles, database connections
 
             function hidePdfSelectionPopover(clearBrowserSelection = false) {
                 activePdfSelectionText = '';
+                activePdfTranslationText = '';
                 activePdfSelectionRect = null;
+                resetPdfSelectionCardPresentation();
                 pdfSelectionPopover.hidden = true;
                 pdfSelectionResult.hidden = true;
                 pdfSelectionResult.textContent = '';
@@ -1126,17 +1154,239 @@ GC releases managed memory. It does not close file handles, database connections
             }
 
             function showPdfSelectionPopover(selection) {
+                const keepExpandedCard = isPdfSelectionCardExpanded() && !pdfSelectionPopover.hidden;
+
+                if (!keepExpandedCard) {
+                    resetPdfSelectionCardPresentation();
+                }
+
                 activePdfSelectionText = selection.text;
+                activePdfTranslationText = '';
                 activePdfSelectionRect = selection.rect;
-                pdfSelectionResult.hidden = true;
-                pdfSelectionResult.textContent = '';
+                pdfSelectionSource.textContent = selection.text;
+                pdfSelectionResult.hidden = !keepExpandedCard;
+                pdfSelectionResult.textContent = keepExpandedCard
+                    ? 'New selection is ready. Choose Translate to update this card.'
+                    : '';
+                updatePdfSelectionCopyButton();
+                updatePdfSelectionExpandButton();
                 pdfSelectionPopover.hidden = false;
 
+                if (!keepExpandedCard) {
+                    positionPdfSelectionPopover();
+                }
+            }
+
+            function isPdfSelectionCardExpanded() {
+                return pdfSelectionPopover.classList.contains('is-expanded');
+            }
+
+            function resetPdfSelectionCardPresentation() {
+                pdfSelectionPopover.classList.remove('is-expanded');
+                pdfSelectionPopover.style.width = '';
+                pdfSelectionPopover.style.height = '';
+                pdfSelectionCardDrag = null;
+                pdfSelectionCardTitle.hidden = true;
+                pdfSelectionSource.hidden = true;
+                resetPdfSelectionLayoutButton.hidden = true;
+                updatePdfSelectionExpandButton();
+            }
+
+            function updatePdfSelectionCopyButton() {
+                const copiesTranslation = Boolean(activePdfTranslationText);
+                const label = copiesTranslation ? 'Copy translation' : 'Copy selected text';
+                copyPdfSelectionButton.title = label;
+                copyPdfSelectionButton.setAttribute('aria-label', label);
+            }
+
+            function updatePdfSelectionExpandButton() {
+                const expanded = isPdfSelectionCardExpanded();
+                const showLabel = !expanded && Boolean(activePdfTranslationText);
+                const label = expanded ? 'Collapse translation' : 'Expand translation';
+
+                expandPdfSelectionButton.title = label;
+                expandPdfSelectionButton.setAttribute('aria-label', label);
+                expandPdfSelectionButton.setAttribute('aria-expanded', String(expanded));
+                expandPdfSelectionButton.classList.toggle('has-label', showLabel);
+                expandPdfSelectionButton.innerHTML = expanded
+                    ? '<i class="bi bi-arrows-angle-contract" aria-hidden="true"></i>'
+                    : `<i class="bi bi-arrows-angle-expand" aria-hidden="true"></i>${showLabel ? '<span>Expand</span>' : ''}`;
+            }
+
+            function clampPdfSelectionCardValue(value, minimum, maximum) {
+                return Math.min(Math.max(value, minimum), maximum);
+            }
+
+            function getStoredPdfSelectionCardLayout() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(pdfSelectionCardLayoutKey) || 'null');
+                    if (!saved || ![saved.leftRatio, saved.topRatio, saved.width, saved.height].every(Number.isFinite)) {
+                        return null;
+                    }
+
+                    return saved;
+                } catch {
+                    return null;
+                }
+            }
+
+            function savePdfSelectionCardLayout() {
+                if (!isPdfSelectionCardExpanded() || pdfSelectionPopover.hidden || window.innerWidth <= 900) {
+                    return;
+                }
+
+                const rect = pdfSelectionPopover.getBoundingClientRect();
+                localStorage.setItem(pdfSelectionCardLayoutKey, JSON.stringify({
+                    leftRatio: rect.left / window.innerWidth,
+                    topRatio: rect.top / window.innerHeight,
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height)
+                }));
+            }
+
+            function applyPdfSelectionCardLayout(layout) {
+                const maximumWidth = Math.max(pdfSelectionCardMinimumWidth, window.innerWidth - (pdfSelectionCardViewportMargin * 2));
+                const maximumHeight = Math.max(pdfSelectionCardMinimumHeight, window.innerHeight - (pdfSelectionCardViewportMargin * 2));
+                const width = clampPdfSelectionCardValue(layout.width, pdfSelectionCardMinimumWidth, maximumWidth);
+                const height = clampPdfSelectionCardValue(layout.height, pdfSelectionCardMinimumHeight, maximumHeight);
+                const left = clampPdfSelectionCardValue(
+                    layout.leftRatio * window.innerWidth,
+                    pdfSelectionCardViewportMargin,
+                    window.innerWidth - width - pdfSelectionCardViewportMargin);
+                const top = clampPdfSelectionCardValue(
+                    layout.topRatio * window.innerHeight,
+                    pdfSelectionCardViewportMargin,
+                    window.innerHeight - height - pdfSelectionCardViewportMargin);
+
+                pdfSelectionPopover.style.width = `${Math.round(width)}px`;
+                pdfSelectionPopover.style.height = `${Math.round(height)}px`;
+                pdfSelectionPopover.style.left = `${Math.round(left)}px`;
+                pdfSelectionPopover.style.top = `${Math.round(top)}px`;
+            }
+
+            function clampPdfSelectionCardToViewport() {
+                const rect = pdfSelectionPopover.getBoundingClientRect();
+                applyPdfSelectionCardLayout({
+                    leftRatio: rect.left / window.innerWidth,
+                    topRatio: rect.top / window.innerHeight,
+                    width: rect.width,
+                    height: rect.height
+                });
+            }
+
+            function positionExpandedPdfSelectionCard() {
+                const maximumWidth = Math.max(pdfSelectionCardMinimumWidth, window.innerWidth - (pdfSelectionCardViewportMargin * 2));
+                const maximumHeight = Math.max(pdfSelectionCardMinimumHeight, window.innerHeight - (pdfSelectionCardViewportMargin * 2));
+                const width = Math.min(pdfSelectionCardDefaultWidth, maximumWidth);
+                const height = Math.min(pdfSelectionCardDefaultHeight, maximumHeight);
+                const sourceRect = activePdfSelectionRect ?? {
+                    left: pdfSelectionCardViewportMargin,
+                    bottom: pdfSelectionCardViewportMargin
+                };
+                const left = clampPdfSelectionCardValue(
+                    sourceRect.left,
+                    pdfSelectionCardViewportMargin,
+                    window.innerWidth - width - pdfSelectionCardViewportMargin);
+                const top = clampPdfSelectionCardValue(
+                    sourceRect.bottom + 10,
+                    pdfSelectionCardViewportMargin,
+                    window.innerHeight - height - pdfSelectionCardViewportMargin);
+
+                pdfSelectionPopover.style.width = `${width}px`;
+                pdfSelectionPopover.style.height = `${height}px`;
+                pdfSelectionPopover.style.left = `${Math.round(left)}px`;
+                pdfSelectionPopover.style.top = `${Math.round(top)}px`;
+            }
+
+            function expandPdfSelectionCard() {
+                if (pdfSelectionPopover.hidden || isPdfSelectionCardExpanded()) {
+                    return;
+                }
+
+                pdfSelectionPopover.classList.add('is-expanded');
+                pdfSelectionCardTitle.hidden = false;
+                pdfSelectionSource.hidden = false;
+                resetPdfSelectionLayoutButton.hidden = false;
+                updatePdfSelectionExpandButton();
+
+                window.requestAnimationFrame(() => {
+                    const savedLayout = getStoredPdfSelectionCardLayout();
+                    if (savedLayout && window.innerWidth > 900) {
+                        applyPdfSelectionCardLayout(savedLayout);
+                    } else {
+                        positionExpandedPdfSelectionCard();
+                    }
+                });
+            }
+
+            function collapsePdfSelectionCard() {
+                if (!isPdfSelectionCardExpanded()) {
+                    return;
+                }
+
+                savePdfSelectionCardLayout();
+                resetPdfSelectionCardPresentation();
                 positionPdfSelectionPopover();
             }
 
+            function resetPdfSelectionCardLayout() {
+                localStorage.removeItem(pdfSelectionCardLayoutKey);
+                if (isPdfSelectionCardExpanded()) {
+                    positionExpandedPdfSelectionCard();
+                }
+            }
+
+            function beginPdfSelectionCardDrag(event) {
+                if (!isPdfSelectionCardExpanded() || event.button !== 0 || event.target.closest('button') || window.innerWidth <= 900) {
+                    return;
+                }
+
+                const rect = pdfSelectionPopover.getBoundingClientRect();
+                pdfSelectionCardDrag = {
+                    pointerId: event.pointerId,
+                    startClientX: event.clientX,
+                    startClientY: event.clientY,
+                    startLeft: rect.left,
+                    startTop: rect.top
+                };
+                pdfSelectionActions.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            }
+
+            function dragPdfSelectionCard(event) {
+                if (!pdfSelectionCardDrag || event.pointerId !== pdfSelectionCardDrag.pointerId) {
+                    return;
+                }
+
+                const rect = pdfSelectionPopover.getBoundingClientRect();
+                const left = clampPdfSelectionCardValue(
+                    pdfSelectionCardDrag.startLeft + event.clientX - pdfSelectionCardDrag.startClientX,
+                    pdfSelectionCardViewportMargin,
+                    window.innerWidth - rect.width - pdfSelectionCardViewportMargin);
+                const top = clampPdfSelectionCardValue(
+                    pdfSelectionCardDrag.startTop + event.clientY - pdfSelectionCardDrag.startClientY,
+                    pdfSelectionCardViewportMargin,
+                    window.innerHeight - rect.height - pdfSelectionCardViewportMargin);
+
+                pdfSelectionPopover.style.left = `${Math.round(left)}px`;
+                pdfSelectionPopover.style.top = `${Math.round(top)}px`;
+            }
+
+            function endPdfSelectionCardDrag(event) {
+                if (!pdfSelectionCardDrag || event.pointerId !== pdfSelectionCardDrag.pointerId) {
+                    return;
+                }
+
+                if (pdfSelectionActions.hasPointerCapture(event.pointerId)) {
+                    pdfSelectionActions.releasePointerCapture(event.pointerId);
+                }
+
+                pdfSelectionCardDrag = null;
+                savePdfSelectionCardLayout();
+            }
+
             function positionPdfSelectionPopover() {
-                if (!activePdfSelectionRect || pdfSelectionPopover.hidden) {
+                if (!activePdfSelectionRect || pdfSelectionPopover.hidden || isPdfSelectionCardExpanded()) {
                     return;
                 }
 
@@ -1212,6 +1462,9 @@ GC releases managed memory. It does not close file handles, database connections
                 try {
                     const result = await requestTranslation(activePdfSelectionText);
                     pdfSelectionResult.textContent = result.text;
+                    activePdfTranslationText = result.text;
+                    updatePdfSelectionCopyButton();
+                    updatePdfSelectionExpandButton();
                     addHistory(activePdfSelectionText, result.text, result.detectedLanguage);
                 } catch (error) {
                     pdfSelectionResult.textContent = error instanceof Error ? error.message : 'Translation unavailable';
@@ -1667,21 +1920,48 @@ GC releases managed memory. It does not close file handles, database connections
                 }
             });
             translatePdfSelectionButton.addEventListener('click', translatePdfSelection);
+            expandPdfSelectionButton.addEventListener('click', () => {
+                if (isPdfSelectionCardExpanded()) {
+                    collapsePdfSelectionCard();
+                } else {
+                    expandPdfSelectionCard();
+                }
+            });
+            resetPdfSelectionLayoutButton.addEventListener('click', resetPdfSelectionCardLayout);
+            pdfSelectionActions.addEventListener('pointerdown', beginPdfSelectionCardDrag);
+            pdfSelectionActions.addEventListener('pointermove', dragPdfSelectionCard);
+            pdfSelectionActions.addEventListener('pointerup', endPdfSelectionCardDrag);
+            pdfSelectionActions.addEventListener('pointercancel', endPdfSelectionCardDrag);
             copyPdfSelectionButton.addEventListener('click', async () => {
-                const copied = await copyText(activePdfSelectionText);
-                pdfPreviewStatus.textContent = copied ? 'Selected text copied.' : 'Copy is unavailable. Select the text and use Ctrl+C.';
+                const copiedText = activePdfTranslationText || activePdfSelectionText;
+                const copied = await copyText(copiedText);
+                pdfPreviewStatus.textContent = copied
+                    ? activePdfTranslationText ? 'Translation copied.' : 'Selected text copied.'
+                    : 'Copy is unavailable. Select the text and use Ctrl+C.';
             });
             closePdfSelectionButton.addEventListener('click', () => hidePdfSelectionPopover(true));
-            pdfCanvasShell.addEventListener('scroll', () => hidePdfSelectionPopover());
+            if ('ResizeObserver' in window) {
+                new ResizeObserver(() => savePdfSelectionCardLayout()).observe(pdfSelectionPopover);
+            }
+            pdfCanvasShell.addEventListener('scroll', () => {
+                if (!isPdfSelectionCardExpanded()) {
+                    hidePdfSelectionPopover();
+                }
+            });
             document.addEventListener('selectionchange', () => {
                 const hasPopoverFocus = pdfSelectionPopover.contains(document.activeElement);
-                if (!getPdfTextSelection() && !hasPopoverFocus) {
+                if (!isPdfSelectionCardExpanded() && !getPdfTextSelection() && !hasPopoverFocus) {
                     hidePdfSelectionPopover();
                 }
             });
             document.addEventListener('mouseup', finishPdfPointerSelection);
             window.addEventListener('resize', () => {
-                hidePdfSelectionPopover();
+                if (isPdfSelectionCardExpanded()) {
+                    clampPdfSelectionCardToViewport();
+                    savePdfSelectionCardLayout();
+                } else {
+                    hidePdfSelectionPopover();
+                }
                 window.clearTimeout(pdfResizeTimer);
                 if (fileEditor.classList.contains('is-split-view') && !canUseSplitFileView()) {
                     setFileView('text');
