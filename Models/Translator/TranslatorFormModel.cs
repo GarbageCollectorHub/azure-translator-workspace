@@ -6,22 +6,22 @@ namespace TranslatorAzure.Models.Translator
     {
         public const string AutoDetectLanguageCode = "auto";
 
-        [FromQuery(Name = "lang-from")]
+        [FromForm(Name = "lang-from")]
         public string LanguageFrom { get; set; } = AutoDetectLanguageCode;
 
-        [FromQuery(Name = "lang-to")]
+        [FromForm(Name = "lang-to")]
         public string LanguageTo { get; set; } = "uk";
 
-        [FromQuery(Name = "text")]
+        [FromForm(Name = "text")]
         public string? Text { get; set; }
 
-        [FromQuery(Name = "translation")]
+        [FromForm(Name = "translation")]
         public string? Translation { get; set; }
 
-        [FromQuery(Name = "detected-lang")]
+        [FromForm(Name = "detected-lang")]
         public string? DetectedLanguage { get; set; }
 
-        [FromQuery(Name = "btn")]
+        [FromForm(Name = "btn")]
         public string? Button { get; set; }
     }
 }

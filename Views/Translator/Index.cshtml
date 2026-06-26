@@ -49,7 +49,7 @@ GC releases managed memory. It does not close file handles, database connections
 <section class="translator-shell">
     <h1 class="visually-hidden">Azure Translator</h1>
 
-    <form id="translator-form" class="translation-surface" method="get" asp-controller="Translator" asp-action="Index">
+    <form id="translator-form" class="translation-surface" method="post" asp-controller="Translator" asp-action="Index">
         @Html.AntiForgeryToken()
         <input type="hidden" id="submit-action" name="btn" value="translate" />
         <input type="hidden" name="detected-lang" value="@Model.DetectedLanguage" />

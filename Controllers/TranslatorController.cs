@@ -1,7 +1,8 @@
+using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.AspNetCore.Mvc;
 using TranslatorAzure.Models.Rest;
 using TranslatorAzure.Models.Translator;
 using TranslatorAzure.Services.Translator;
-using Microsoft.AspNetCore.Mvc;
 
 namespace TranslatorAzure.Controllers
 {
@@ -21,16 +22,29 @@ namespace TranslatorAzure.Controllers
             _logger = logger;
         }
 
+
+        // GET /Translator Ч только показывает страницу
         [HttpGet]
-        public async Task<IActionResult> Index(TranslatorFormModel formModel, CancellationToken cancellationToken)
+        public async Task<IActionResult> Index(CancellationToken cancellationToken)
+        {
+            var formModel = new TranslatorFormModel();
+            NormalizeForm(formModel);
+
+            var viewModel = await CreateViewModelAsync(formModel, cancellationToken);
+
+            return View(viewModel);
+        }
+
+        // POST /Translator Ч переводит основную форму
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Index(
+            [FromForm] TranslatorFormModel formModel,
+            CancellationToken cancellationToken)
         {
             NormalizeForm(formModel);
 
-            var viewModel = new TranslatorViewModel
-            {
-                FormModel = formModel,
-                TranslatorLanguages = await _translatorService.GetLanguagesAsync(cancellationToken)
-            };
+            var viewModel = await CreateViewModelAsync(formModel, cancellationToken);
 
             if (IsSubmitted(formModel))
             {
@@ -42,6 +56,13 @@ namespace TranslatorAzure.Controllers
                     }
                     else if (!string.IsNullOrWhiteSpace(formModel.Text))
                     {
+                        if (formModel.Text.Length > TranslationRequest.MaxTextLength)
+                        {
+                            viewModel.ErrorMessage =
+                                $"Enter up to {TranslationRequest.MaxTextLength:N0} characters to translate.";
+                            return View(viewModel);
+                        }
+
                         await TranslateFormAsync(formModel, viewModel, cancellationToken);
                     }
                 }
@@ -55,6 +76,18 @@ namespace TranslatorAzure.Controllers
             return View(viewModel);
         }
 
+        private async Task<TranslatorViewModel> CreateViewModelAsync(
+            TranslatorFormModel formModel,
+            CancellationToken cancellationToken)
+        {
+            return new TranslatorViewModel
+            {
+                FormModel = formModel,
+                TranslatorLanguages = await _translatorService.GetLanguagesAsync(cancellationToken)
+            };
+        }
+
+        // POST /Translator/Translate Ч остаЄтс€ дл€ selected text / PDF selection
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Translate(

@@ -38,6 +38,44 @@ public sealed class TranslatorHttpContractTests : IClassFixture<TranslatorApplic
     }
 
     [Fact]
+    public async Task TranslatorPage_FormPost_ReturnsTranslatedText()
+    {
+        _factory.ResetTranslator();
+        using var client = await CreateAntiforgeryClientAsync();
+
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["btn"] = "translate",
+            ["lang-from"] = "auto",
+            ["lang-to"] = "uk",
+            ["text"] = "Hello"
+        });
+
+        var response = await client.PostAsync("/Translator", form);
+
+        response.EnsureSuccessStatusCode();
+
+        var html = await response.Content.ReadAsStringAsync();
+        var decodedHtml = WebUtility.HtmlDecode(html);
+
+        Assert.Contains("\u041f\u0440\u0438\u0432\u0456\u0442", decodedHtml);
+        Assert.Single(_factory.Translator.TranslateCalls);
+    }
+
+    [Fact]
+    public async Task TranslatorPage_Get_DoesNotTranslateQueryText()
+    {
+        _factory.ResetTranslator();
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/Translator?btn=translate&text=Hello&lang-to=uk");
+
+        response.EnsureSuccessStatusCode();
+
+        Assert.Empty(_factory.Translator.TranslateCalls);
+    }
+
+    [Fact]
     public async Task TranslateEndpoint_RejectsRequestWithoutAntiforgeryToken()
     {
         _factory.ResetTranslator();
