@@ -1,5 +1,6 @@
 using TranslatorAzure.Services.FileText;
 using TranslatorAzure.Services.Translator;
+using TranslatorAzure.Services.Analytics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +32,10 @@ builder.Services.AddSingleton<IFileTextExtractor, PlainTextExtractor>();
 builder.Services.AddSingleton<IFileTextExtractor, OpenXmlWordTextExtractor>();
 builder.Services.AddSingleton<IFileTextExtractor, PdfTextExtractor>();
 builder.Services.AddScoped<IFileTextImportService, FileTextImportService>();
+
+// Analytics Services
+builder.Services.AddAnalytics(builder.Configuration);
+
 
 var app = builder.Build();
 

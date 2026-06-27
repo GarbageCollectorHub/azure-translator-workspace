@@ -1,6 +1,7 @@
-using TranslatorAzure.Services.FileText;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using TranslatorAzure.Services.Analytics.Tracking;
+using TranslatorAzure.Services.FileText;
 
 namespace TranslatorAzure.Controllers;
 
@@ -8,7 +9,8 @@ namespace TranslatorAzure.Controllers;
 public sealed class FileTextController(
     IFileTextImportService fileTextImportService,
     IOptions<FileTextImportOptions> fileTextOptions,
-    ILogger<FileTextController> logger) : Controller
+    ILogger<FileTextController> logger,
+    IAnalyticsTracker analyticsTracker) : Controller
 {
     private readonly FileTextImportOptions _options = fileTextOptions.Value;
 
@@ -34,7 +36,10 @@ public sealed class FileTextController(
                 file.FileName,
                 file.Length,
                 source,
-                cancellationToken);
+                cancellationToken
+            );
+
+            analyticsTracker.TrackFileImported(HttpContext);
 
             return Ok(new
             {

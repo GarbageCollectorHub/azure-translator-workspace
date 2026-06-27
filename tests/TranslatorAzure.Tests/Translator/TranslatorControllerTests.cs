@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using TranslatorAzure.Controllers;
@@ -29,6 +30,64 @@ public sealed class TranslatorControllerTests
         using var payload = System.Text.Json.JsonDocument.Parse(
             System.Text.Json.JsonSerializer.Serialize(result.Value));
         Assert.Equal("\u041f\u0440\u0438\u0432\u0456\u0442", payload.RootElement.GetProperty("Data").GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task Translate_TracksSelectionTranslationAfterSuccessfulRequest()
+    {
+        var translator = new TestTranslatorService();
+        var analyticsTracker = new TestAnalyticsTracker();
+        var controller = CreateController(translator, analyticsTracker);
+
+        var action = await controller.Translate(new TranslationRequest
+        {
+            Text = "Hello",
+            LanguageFrom = "en",
+            LanguageTo = "uk"
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(action);
+        Assert.Equal(1, analyticsTracker.SelectionTranslationCompletedCalls);
+        Assert.Equal(0, analyticsTracker.PdfSelectionTranslationCompletedCalls);
+    }
+
+    [Fact]
+    public async Task Translate_TracksPdfSelectionTranslationWhenSourceIsPdfSelection()
+    {
+        var translator = new TestTranslatorService();
+        var analyticsTracker = new TestAnalyticsTracker();
+        var controller = CreateController(translator, analyticsTracker);
+
+        var action = await controller.Translate(new TranslationRequest
+        {
+            Text = "Hello",
+            LanguageFrom = "en",
+            LanguageTo = "uk",
+            Source = "pdf-selection"
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(action);
+        Assert.Equal(0, analyticsTracker.SelectionTranslationCompletedCalls);
+        Assert.Equal(1, analyticsTracker.PdfSelectionTranslationCompletedCalls);
+    }
+
+    [Fact]
+    public async Task Index_TracksMainTranslationAfterSuccessfulSubmittedText()
+    {
+        var translator = new TestTranslatorService();
+        var analyticsTracker = new TestAnalyticsTracker();
+        var controller = CreateController(translator, analyticsTracker);
+
+        var action = await controller.Index(new TranslatorFormModel
+        {
+            Button = "translate",
+            Text = "Hello",
+            LanguageFrom = "auto",
+            LanguageTo = "uk"
+        }, CancellationToken.None);
+
+        Assert.IsType<ViewResult>(action);
+        Assert.Equal(1, analyticsTracker.MainTranslationCompletedCalls);
     }
 
     [Fact]
@@ -177,6 +236,19 @@ public sealed class TranslatorControllerTests
         Assert.Equal("Translation is temporarily unavailable. Please try again.", model.ErrorMessage);
     }
 
-    private static TranslatorController CreateController(ITranslatorService translator) =>
-        new(translator, NullLogger<TranslatorController>.Instance);
+    private static TranslatorController CreateController(
+        ITranslatorService translator,
+        TestAnalyticsTracker? analyticsTracker = null)
+    {
+        return new TranslatorController(
+            translator,
+            NullLogger<TranslatorController>.Instance,
+            analyticsTracker ?? new TestAnalyticsTracker())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext()
+            }
+        };
+    }
 }

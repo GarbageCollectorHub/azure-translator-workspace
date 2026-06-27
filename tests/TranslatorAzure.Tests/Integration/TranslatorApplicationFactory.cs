@@ -32,6 +32,15 @@ public sealed class TranslatorApplicationFactory : WebApplicationFactory<Program
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+        {
+            configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["analytics:enabled"] = "false"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ITranslatorService>();

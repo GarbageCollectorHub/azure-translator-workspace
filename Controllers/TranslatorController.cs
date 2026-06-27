@@ -2,6 +2,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.AspNetCore.Mvc;
 using TranslatorAzure.Models.Rest;
 using TranslatorAzure.Models.Translator;
+using TranslatorAzure.Services.Analytics.Tracking;
 using TranslatorAzure.Services.Translator;
 
 namespace TranslatorAzure.Controllers
@@ -14,12 +15,17 @@ namespace TranslatorAzure.Controllers
         private readonly ITranslatorService _translatorService;
         private readonly ILogger<TranslatorController> _logger;
 
+        private readonly IAnalyticsTracker _analyticsTracker;
+
         public TranslatorController(
             ITranslatorService translatorService,
-            ILogger<TranslatorController> logger)
+            ILogger<TranslatorController> logger,
+            IAnalyticsTracker analyticsTracker
+            )
         {
             _translatorService = translatorService;
             _logger = logger;
+            _analyticsTracker = analyticsTracker;
         }
 
 
@@ -27,6 +33,8 @@ namespace TranslatorAzure.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
+            _analyticsTracker.TrackVisitOpened(HttpContext);
+
             var formModel = new TranslatorFormModel();
             NormalizeForm(formModel);
 
@@ -64,6 +72,11 @@ namespace TranslatorAzure.Controllers
                         }
 
                         await TranslateFormAsync(formModel, viewModel, cancellationToken);
+
+                        if (viewModel.ErrorMessage == null && !string.IsNullOrWhiteSpace(viewModel.Translation))
+                        {
+                            _analyticsTracker.TrackMainTranslationCompleted(HttpContext);
+                        }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -120,6 +133,14 @@ namespace TranslatorAzure.Controllers
                         StatusCodes.Status503ServiceUnavailable,
                         CreateTranslationErrorResponse());
                 }
+
+                var isPdfSelection = string.Equals(
+                                        request.Source,
+                                        "pdf-selection",
+                                        StringComparison.OrdinalIgnoreCase
+                                        );
+
+                _analyticsTracker.TrackSelectionTranslationCompleted(HttpContext, isPdfSelection);
 
                 return Ok(new RestResponse
                 {

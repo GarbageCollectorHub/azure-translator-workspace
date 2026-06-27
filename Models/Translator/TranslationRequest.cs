@@ -13,4 +13,6 @@ public sealed class TranslationRequest
     public string LanguageFrom { get; init; } = TranslatorFormModel.AutoDetectLanguageCode;
 
     public string LanguageTo { get; init; } = "uk";
+
+    public string? Source { get; init; }
 }

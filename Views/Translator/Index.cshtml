@@ -694,7 +694,7 @@ GC releases managed memory. It does not close file handles, database connections
                 selectionStatus.textContent = message;
             }
 
-            async function requestTranslation(text) {
+            async function requestTranslation(text, source = 'selection') {
                 const response = await fetch(translateEndpoint, {
                     method: 'POST',
                     headers: {
@@ -704,7 +704,8 @@ GC releases managed memory. It does not close file handles, database connections
                     body: JSON.stringify({
                         text,
                         languageFrom: sourceLanguage.value,
-                        languageTo: targetLanguage.value
+                        languageTo: targetLanguage.value,
+                        source
                     })
                 });
                 const result = await response.json();
@@ -753,7 +754,7 @@ GC releases managed memory. It does not close file handles, database connections
                 setSelectionStatus('Translating...');
 
                 try {
-                    const result = await requestTranslation(selectedText);
+                    const result = await requestTranslation(selectedText, 'selection');
                     const output = result.text;
 
                     if (replaceSelected.checked) {
@@ -1460,7 +1461,7 @@ GC releases managed memory. It does not close file handles, database connections
                 positionPdfSelectionPopover();
 
                 try {
-                    const result = await requestTranslation(activePdfSelectionText);
+                    const result = await requestTranslation(activePdfSelectionText, 'pdf-selection');
                     pdfSelectionResult.textContent = result.text;
                     activePdfTranslationText = result.text;
                     updatePdfSelectionCopyButton();
