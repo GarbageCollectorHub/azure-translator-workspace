@@ -1046,6 +1046,10 @@ textarea:focus-visible {
   box-shadow: 0 8px 20px rgba(23, 32, 51, 0.12);
 }
 
+.translation-toast-container {
+  z-index: 1100;
+}
+
 .ltr-text {
   direction: ltr;
 }
