@@ -1,5 +1,7 @@
 using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Models.Rest;
 using TranslatorAzure.Models.Translator;
 using TranslatorAzure.Services.Analytics.Tracking;
@@ -29,7 +31,7 @@ namespace TranslatorAzure.Controllers
         }
 
 
-        // GET /Translator — только показывает страницу
+        // GET /Translator вЂ” С‚РѕР»СЊРєРѕ РїРѕРєР°Р·С‹РІР°РµС‚ СЃС‚СЂР°РЅРёС†Сѓ
         [HttpGet]
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
@@ -43,9 +45,10 @@ namespace TranslatorAzure.Controllers
             return View(viewModel);
         }
 
-        // POST /Translator — переводит основную форму
+        // POST /Translator вЂ” РїРµСЂРµРІРѕРґРёС‚ РѕСЃРЅРѕРІРЅСѓСЋ С„РѕСЂРјСѓ
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(TranslatorRateLimitPolicies.Translation)]
         public async Task<IActionResult> Index(
             [FromForm] TranslatorFormModel formModel,
             CancellationToken cancellationToken)
@@ -100,9 +103,10 @@ namespace TranslatorAzure.Controllers
             };
         }
 
-        // POST /Translator/Translate — остаётся для selected text / PDF selection
+        // POST /Translator/Translate вЂ” РѕСЃС‚Р°С‘С‚СЃСЏ РґР»СЏ selected text / PDF selection
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(TranslatorRateLimitPolicies.Translation)]
         public async Task<IActionResult> Translate(
             [FromBody] TranslationRequest request,
             CancellationToken cancellationToken)

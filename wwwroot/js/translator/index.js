@@ -1268,7 +1268,9 @@ const pageConfig = readTranslatorPageConfig();
             if (!response.ok || !Array.isArray(result.segments) || result.segments.length === 0) {
                 const fallbackMessage = response.status === 413
                     ? `The file is larger than the ${maxUploadSizeLabel} import limit.`
-                    : 'The file could not be imported.';
+                    : response.status === 429
+                        ? 'Too many requests. Please wait a minute and try again.'
+                        : 'The file could not be imported.';
                 showFileImportMessage(result.message || fallbackMessage, true);
                 return;
             }

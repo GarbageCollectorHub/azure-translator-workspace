@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Services.Analytics.Tracking;
 using TranslatorAzure.Services.FileText;
 
@@ -16,6 +18,7 @@ public sealed class FileTextController(
 
     [HttpPost("import")]
     [ValidateAntiForgeryToken]
+    [EnableRateLimiting(TranslatorRateLimitPolicies.FileImport)]
     [RequestSizeLimit(FileTextImportOptions.MaximumRequestBytes)]
     public async Task<IActionResult> Import(IFormFile? file, CancellationToken cancellationToken)
     {

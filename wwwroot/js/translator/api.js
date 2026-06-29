@@ -18,10 +18,10 @@ export function createTranslatorApi({
                 source
             })
         });
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
 
         if (!response.ok || !result.status?.isOk) {
-            throw new Error(result.data?.message || result.status?.phrase || 'Translation unavailable');
+            throw new Error(result.data?.message || result.message || result.status?.phrase || 'Translation unavailable');
         }
 
         const output = result.data?.text ?? '';
