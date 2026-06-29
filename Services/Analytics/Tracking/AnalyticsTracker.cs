@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using TranslatorAzure.Services.Analytics.Configuration;
 using TranslatorAzure.Services.Analytics.Events;
+using TranslatorAzure.Services.Analytics.Network;
 using TranslatorAzure.Services.Analytics.Queue;
 
 namespace TranslatorAzure.Services.Analytics.Tracking;
@@ -36,18 +37,19 @@ public sealed class AnalyticsTracker(
 
         var visitorId = GetOrCreateVisitorId(httpContext, now);
 
-        if (!ShouldTrackNewVisit(httpContext, now))
-        {
-            return;
-        }
+        var countAsVisit = ShouldTrackNewVisit(httpContext, now);
 
-        SetLastVisitCookie(httpContext, now);
+        if (countAsVisit)
+        {
+            SetLastVisitCookie(httpContext, now);
+        }
 
         queue.TryEnqueue(new AnalyticsEvent
         {
             VisitorId = visitorId,
             Type = AnalyticsEventType.VisitOpened,
             CreatedAtUtc = now,
+            CountAsVisit = countAsVisit,
             IpAddress = GetClientIpAddress(httpContext),
             UserAgent = Truncate(httpContext.Request.Headers["User-Agent"].ToString(), 500),
             AcceptLanguage = Truncate(httpContext.Request.Headers["Accept-Language"].ToString(), 200),
@@ -191,14 +193,7 @@ public sealed class AnalyticsTracker(
 
     private static string? GetClientIpAddress(HttpContext httpContext)
     {
-        var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].ToString();
-
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return httpContext.Connection.RemoteIpAddress?.ToString();
+        return ClientIpAddress.FromHttpContext(httpContext);
     }
 
     private static string? GetTrackingSource(HttpContext httpContext)

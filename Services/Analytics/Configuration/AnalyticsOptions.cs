@@ -4,7 +4,7 @@ public sealed class AnalyticsOptions
 {
     public const string SectionName = "analytics";
 
-    public bool Enabled { get; set; } = false;      // Enabled = false по умолчанию — специально. Если нет azuresettings.json, приложение не должно падать.
+    public bool Enabled { get; set; } = false;
 
     public string? IpHashSalt { get; set; }
 

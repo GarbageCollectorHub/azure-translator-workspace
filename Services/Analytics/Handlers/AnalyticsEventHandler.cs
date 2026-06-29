@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using TranslatorAzure.Models.Analytics;
 using TranslatorAzure.Services.Analytics.Configuration;
 using TranslatorAzure.Services.Analytics.Events;
 using TranslatorAzure.Services.Analytics.GeoIp;
+using TranslatorAzure.Services.Analytics.Network;
 using TranslatorAzure.Services.Analytics.Repositories;
 using TranslatorAzure.Services.Analytics.Security;
 using TranslatorAzure.Services.Analytics.UserAgent;
@@ -59,6 +60,16 @@ public sealed class AnalyticsEventHandler(
 
         if (!_options.GeoIpEnabled || !shouldLookupGeo || string.IsNullOrWhiteSpace(analyticsEvent.IpAddress))
         {
+            return;
+        }
+
+        if (!ClientIpAddress.IsPublic(analyticsEvent.IpAddress))
+        {
+            await repository.UpdateGeoStatusAsync(
+                analyticsEvent.VisitorId,
+                VisitProfile.GeoNonPublic,
+                cancellationToken);
+
             return;
         }
 

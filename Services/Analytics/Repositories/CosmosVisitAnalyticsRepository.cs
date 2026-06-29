@@ -29,15 +29,23 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
                 cancellationToken: cancellationToken);
 
             var profile = response.Resource;
+            var previousIpHash = profile.IpHash;
+            var countAsVisit = analyticsEvent.CountAsVisit
+                || profile.VisitCount == 0
+                || profile.LastVisitsUtc.Count == 0;
 
             profile.LastSeenAtUtc = analyticsEvent.CreatedAtUtc;
-            profile.VisitCount += 1;
-            profile.LastVisitsUtc.Insert(0, analyticsEvent.CreatedAtUtc);
-            profile.LastVisitsUtc = profile.LastVisitsUtc
-                .Distinct()
-                .OrderByDescending(date => date)
-                .Take(MaxLastVisits)
-                .ToList();
+
+            if (countAsVisit)
+            {
+                profile.VisitCount += 1;
+                profile.LastVisitsUtc.Insert(0, analyticsEvent.CreatedAtUtc);
+                profile.LastVisitsUtc = profile.LastVisitsUtc
+                    .Distinct()
+                    .OrderByDescending(date => date)
+                    .Take(MaxLastVisits)
+                    .ToList();
+            }
 
             profile.IpHash = ipHash ?? profile.IpHash;
             profile.UserAgent = analyticsEvent.UserAgent ?? profile.UserAgent;
@@ -54,7 +62,11 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
                 profile.LastSource = analyticsEvent.Source;
             }
 
-            var shouldLookupGeo = ShouldLookupGeo(profile, analyticsEvent.IpAddress);
+            var shouldLookupGeo = ShouldLookupGeo(
+                profile,
+                analyticsEvent.IpAddress,
+                ipHash,
+                previousIpHash);
 
             if (shouldLookupGeo)
             {
@@ -258,11 +270,29 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
         }
     }
 
-    private static bool ShouldLookupGeo(VisitProfile profile, string? ipAddress)
+    private static bool ShouldLookupGeo(
+        VisitProfile profile,
+        string? ipAddress,
+        string? currentIpHash,
+        string? previousIpHash)
     {
-        return !string.IsNullOrWhiteSpace(ipAddress)
-            && string.IsNullOrWhiteSpace(profile.Country)
-            && profile.GeoStatus != VisitProfile.GeoUnavailable;
+        if (string.IsNullOrWhiteSpace(ipAddress) || !string.IsNullOrWhiteSpace(profile.Country))
+        {
+            return false;
+        }
+
+        if (profile.GeoStatus == VisitProfile.GeoCompleted)
+        {
+            return false;
+        }
+
+        if (profile.GeoStatus == VisitProfile.GeoNonPublic)
+        {
+            return !string.IsNullOrWhiteSpace(currentIpHash)
+                && currentIpHash != previousIpHash;
+        }
+
+        return true;
     }
 
     private static string CreateDocumentId(string visitorId)

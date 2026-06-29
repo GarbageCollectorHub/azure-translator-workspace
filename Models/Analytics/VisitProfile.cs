@@ -7,6 +7,7 @@ public sealed class VisitProfile
     public const string GeoPending = "Pending";
     public const string GeoCompleted = "Completed";
     public const string GeoUnavailable = "Unavailable";
+    public const string GeoNonPublic = "NonPublic";
 
     [JsonProperty("id")]
     public string Id { get; set; } = default!;

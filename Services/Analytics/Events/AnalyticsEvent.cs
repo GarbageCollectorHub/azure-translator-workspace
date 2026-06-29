@@ -8,6 +8,8 @@ public sealed class AnalyticsEvent
 
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 
+    public bool CountAsVisit { get; init; } = true;
+
     public string? IpAddress { get; init; }
 
     public string? UserAgent { get; init; }
