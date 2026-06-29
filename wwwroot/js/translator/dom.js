@@ -9,6 +9,7 @@ export function getTranslatorElements() {
         translateButton: byId('translate-button'),
         sourceLanguage: byId('source-language'),
         targetLanguage: byId('target-language'),
+        sourceText: byId('source-text'),
         sampleText,
         fileText: byId('file-text'),
         defaultSampleText: sampleText.value,

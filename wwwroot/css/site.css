@@ -134,6 +134,8 @@ textarea:focus-visible {
 }
 
 .translation-surface {
+  --translator-textarea-height: clamp(172px, 20vh, 244px);
+
   padding: clamp(16px, 1.4vw, 24px);
 }
 
@@ -182,10 +184,19 @@ textarea:focus-visible {
 
 .translator-textarea {
   min-height: 172px;
-  height: clamp(172px, 20vh, 244px);
+  max-height: 520px;
+  height: var(--translator-textarea-height);
   padding: 11px 12px;
-  resize: vertical;
+  resize: none;
   line-height: 1.55;
+}
+
+.translator-textarea--source {
+  resize: vertical;
+}
+
+.translator-textarea--target {
+  resize: none;
 }
 
 .translator-actions {
@@ -269,6 +280,17 @@ textarea:focus-visible {
 .translator-meta .translator-error {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.translator-meta .translator-transliteration {
+  display: block;
+  width: 100%;
+  max-height: 112px;
+  align-items: flex-start;
+  overflow: auto;
+  padding: 7px 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .workspace-grid {
@@ -473,7 +495,7 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: 6px;
   outline: 0;
-  resize: vertical;
+  resize: none;
   color: var(--text);
   background: var(--surface-subtle);
   line-height: 1.65;

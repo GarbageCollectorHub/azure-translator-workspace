@@ -90,7 +90,7 @@ GC releases managed memory. It does not close file handles, database connections
                 <textarea
                     id="source-text"
                     name="text"
-                    class="form-control translator-textarea @(textDirectionFrom == "ltr" ? "ltr-text" : "rtl-text")"
+                    class="form-control translator-textarea translator-textarea--source @(textDirectionFrom == "ltr" ? "ltr-text" : "rtl-text")"
                     rows="7">@sourceText</textarea>
 
                 <div class="translator-meta">
@@ -105,10 +105,10 @@ GC releases managed memory. It does not close file handles, database connections
                             }
                         </span>
                     }
-                    @if (Model.TransliterationFrom != null)
-                    {
-                        <span title="Transliteration">[@Model.TransliterationFrom]</span>
-                    }
+                @if (Model.TransliterationFrom != null)
+                {
+                    <span class="translator-transliteration" title="Transliteration">[@Model.TransliterationFrom]</span>
+                }
                 </div>
             </div>
 
@@ -152,7 +152,7 @@ GC releases managed memory. It does not close file handles, database connections
                     <textarea
                         id="translated-text"
                         name="translation"
-                        class="form-control translator-textarea @(textDirectionTo == "ltr" ? "ltr-text" : "rtl-text")"
+                        class="form-control translator-textarea translator-textarea--target @(textDirectionTo == "ltr" ? "ltr-text" : "rtl-text")"
                         rows="7"
                         placeholder="Translation will appear here"
                         readonly>@Model.Translation</textarea>
@@ -174,10 +174,10 @@ GC releases managed memory. It does not close file handles, database connections
                             @Model.ErrorMessage
                         </span>
                     }
-                    @if (Model.TransliterationTo != null)
-                    {
-                        <span title="Transliteration">[@Model.TransliterationTo]</span>
-                    }
+                @if (Model.TransliterationTo != null)
+                {
+                    <span class="translator-transliteration" title="Transliteration">[@Model.TransliterationTo]</span>
+                }
                 </div>
             </div>
         </div>

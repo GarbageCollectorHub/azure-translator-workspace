@@ -29,6 +29,7 @@ const pageConfig = readTranslatorPageConfig();
         translateButton,
         sourceLanguage,
         targetLanguage,
+        sourceText,
         sampleText,
         fileText,
         defaultSampleText,
@@ -113,6 +114,10 @@ const pageConfig = readTranslatorPageConfig();
     let pdfSelectionCardDrag = null;
 
     const replacementHistoryLimit = 20;
+    const languagePreferencesKey = 'azure-translator-language-preferences-v1';
+    const translationTextareaHeightKey = 'azure-translator-translation-textarea-height-v1';
+    const translationTextareaMinimumHeight = 172;
+    const translationTextareaMaximumHeight = 520;
     const pdfSelectionPointerTolerance = 48;
     const pdfSelectionCardLayoutKey = 'azure-translator-pdf-selection-card-layout-v1';
     const pdfSelectionCardViewportMargin = 16;
@@ -158,6 +163,132 @@ const pageConfig = readTranslatorPageConfig();
         document.getElementById('toast-body').textContent = text;
         document.getElementById('toast-time').textContent = new Date().toLocaleTimeString();
         bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false }).show();
+    }
+
+    function languageOptionExists(select, value) {
+        return Boolean(value) && Array.from(select.options).some(option => option.value === value);
+    }
+
+    function loadLanguagePreferences() {
+        try {
+            return JSON.parse(localStorage.getItem(languagePreferencesKey) || 'null');
+        } catch {
+            return null;
+        }
+    }
+
+    function saveLanguagePreferences() {
+        try {
+            localStorage.setItem(languagePreferencesKey, JSON.stringify({
+                sourceLanguage: sourceLanguage.value,
+                targetLanguage: targetLanguage.value
+            }));
+        } catch {
+            // Language preferences are a convenience only; the translator should keep working without storage.
+        }
+    }
+
+    function syncLanguageTextDirection(select, textArea) {
+        const selectedOption = select.selectedOptions[0];
+        const isRtl = selectedOption?.classList.contains('rtl-text') ?? false;
+
+        textArea.classList.toggle('rtl-text', isRtl);
+        textArea.classList.toggle('ltr-text', !isRtl);
+    }
+
+    function syncLanguageTextDirections() {
+        syncLanguageTextDirection(sourceLanguage, form.elements.text);
+        syncLanguageTextDirection(targetLanguage, translatedText);
+    }
+
+    function restoreLanguagePreferences() {
+        const preferences = loadLanguagePreferences();
+        if (!preferences) {
+            return;
+        }
+
+        const defaultSourceLanguage = sourceLanguage.options[0]?.value ?? 'auto';
+        const isDefaultLanguagePair = sourceLanguage.value === defaultSourceLanguage
+            && targetLanguage.value === 'uk';
+
+        if (!isDefaultLanguagePair) {
+            return;
+        }
+
+        if (languageOptionExists(sourceLanguage, preferences.sourceLanguage)) {
+            sourceLanguage.value = preferences.sourceLanguage;
+        }
+
+        if (languageOptionExists(targetLanguage, preferences.targetLanguage)) {
+            targetLanguage.value = preferences.targetLanguage;
+        }
+    }
+
+    function loadTranslationTextareaHeight() {
+        try {
+            const value = Number(sessionStorage.getItem(translationTextareaHeightKey));
+            return Number.isFinite(value) ? value : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function saveTranslationTextareaHeight(height) {
+        try {
+            sessionStorage.setItem(translationTextareaHeightKey, String(Math.round(height)));
+        } catch {
+            // Layout preference is optional; keep the translator usable without storage.
+        }
+    }
+
+    function clampTranslationTextareaHeight(height) {
+        return Math.min(
+            Math.max(height, translationTextareaMinimumHeight),
+            translationTextareaMaximumHeight
+        );
+    }
+
+    function setTranslationTextareaHeight(height, persist = true) {
+        const nextHeight = clampTranslationTextareaHeight(height);
+        sourceText.style.height = `${nextHeight}px`;
+        translatedText.style.height = `${nextHeight}px`;
+
+        if (persist) {
+            saveTranslationTextareaHeight(nextHeight);
+        }
+    }
+
+    function syncTranslationTextareaHeight(persist = true) {
+        setTranslationTextareaHeight(sourceText.getBoundingClientRect().height, persist);
+    }
+
+    function initializeTranslationTextareaResize() {
+        const savedHeight = loadTranslationTextareaHeight();
+
+        if (savedHeight != null) {
+            setTranslationTextareaHeight(savedHeight, false);
+        }
+
+        let resizeFrame = 0;
+        const scheduleTextareaHeightSync = (persist = true) => {
+            cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(() => syncTranslationTextareaHeight(persist));
+        };
+
+        if ('ResizeObserver' in window) {
+            const observer = new ResizeObserver(() => {
+                scheduleTextareaHeightSync();
+            });
+
+            observer.observe(sourceText);
+        }
+
+        sourceText.addEventListener('input', () => scheduleTextareaHeightSync(false));
+        sourceText.addEventListener('keyup', () => scheduleTextareaHeightSync(false));
+        sourceText.addEventListener('mouseup', () => scheduleTextareaHeightSync());
+        sourceText.addEventListener('pointerup', () => scheduleTextareaHeightSync());
+        sourceText.addEventListener('touchend', () => scheduleTextareaHeightSync());
+        window.addEventListener('mouseup', () => scheduleTextareaHeightSync());
     }
 
     function activeTextArea() {
@@ -1386,7 +1517,23 @@ const pageConfig = readTranslatorPageConfig();
     historyToggle.addEventListener('click', () => setHistoryOpen(historyPanel.hidden));
     historyClose.addEventListener('click', () => setHistoryOpen(false));
 
+    initializeTranslationTextareaResize();
+
+    restoreLanguagePreferences();
+    syncLanguageTextDirections();
+    saveLanguagePreferences();
+    sourceLanguage.addEventListener('change', () => {
+        syncLanguageTextDirection(sourceLanguage, form.elements.text);
+        saveLanguagePreferences();
+    });
+    targetLanguage.addEventListener('change', () => {
+        syncLanguageTextDirection(targetLanguage, translatedText);
+        saveLanguagePreferences();
+    });
+
     form?.addEventListener('submit', event => {
+        saveLanguagePreferences();
+        syncTranslationTextareaHeight();
         submitAction.value = event.submitter?.dataset.submitAction || submitAction.value || 'translate';
         translateButton.disabled = true;
         translateButton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';

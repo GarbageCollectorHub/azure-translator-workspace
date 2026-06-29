@@ -4,6 +4,7 @@ public sealed class TranslatorRateLimitOptions
 {
     public const string SectionName = "RateLimiting";
 
+    // Per-client limits use the visitor IP; global limits cap all visitors together.
     public int TranslationPermitLimit { get; init; } = 20;
 
     public int TranslationWindowSeconds { get; init; } = 60;
