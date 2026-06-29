@@ -891,6 +891,10 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.pdf-selection-drag-handle {
+  display: none;
+}
+
 .pdf-selection-translate {
   min-height: 30px;
   padding: 4px 8px;
@@ -960,6 +964,30 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--border);
   cursor: grab;
   user-select: none;
+}
+
+.pdf-selection-popover.is-expanded .pdf-selection-drag-handle {
+  display: inline-flex;
+  width: 34px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 6px 0 -1px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: #64748b;
+  background: var(--surface-subtle);
+  cursor: grab;
+}
+
+.pdf-selection-popover.is-expanded .pdf-selection-actions:hover .pdf-selection-drag-handle {
+  border-color: #bfdbfe;
+  color: var(--primary);
+  background: #eff6ff;
+}
+
+.pdf-selection-popover.is-expanded .pdf-selection-drag-handle i {
+  font-size: 1.05rem;
 }
 
 .pdf-selection-popover.is-expanded .pdf-selection-actions:active {
@@ -1050,7 +1078,7 @@ textarea:focus-visible {
   font-size: 0.875rem;
 }
 
-@media (min-width: 901px) and (min-height: 820px) {
+@media (min-width: 901px) {
   .workspace-grid {
     height: clamp(440px, 52dvh, 760px);
     min-height: 0;
@@ -1066,30 +1094,62 @@ textarea:focus-visible {
   .file-drop-zone {
     min-height: 0;
   }
+}
 
+
+body.is-resizing-workspace {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+body.is-resizing-workspace * {
+  cursor: ns-resize !important;
 }
 
 @media (min-width: 901px) {
   .workspace-resize-handle {
+    position: relative;
     display: flex;
-    height: 12px;
+    height: 30px;
     align-items: center;
     justify-content: center;
-    margin: 7px -4px -5px;
+    margin: 10px -4px 0;
     cursor: ns-resize;
     touch-action: none;
   }
 
   .workspace-resize-handle span {
-    width: 36px;
-    height: 3px;
-    border-radius: 3px;
-    background: var(--border-strong);
+    width: 56px;
+    height: 5px;
+    border-radius: 999px;
+    background: #c4cedd;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.28);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+
+  .workspace-resize-handle::after {
+    content: 'Drag to resize';
+    position: absolute;
+    top: 50%;
+    left: calc(50% + 38px);
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    white-space: nowrap;
   }
 
   .workspace-resize-handle:hover span,
   .workspace-resize-handle:focus-visible span {
     background: var(--primary);
+    transform: scaleX(1.08);
+  }
+
+  .workspace-resize-handle:hover::after,
+  .workspace-resize-handle:focus-visible::after {
+    opacity: 1;
   }
 }
 

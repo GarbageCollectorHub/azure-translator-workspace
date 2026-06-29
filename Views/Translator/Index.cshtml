@@ -287,6 +287,9 @@ GC releases managed memory. It does not close file handles, database connections
                             <div id="pdf-selection-popover" class="pdf-selection-popover" role="dialog" aria-label="Selected PDF text" hidden>
                                 <div class="pdf-selection-actions" role="toolbar" aria-label="Selected text actions">
                                     <span id="pdf-selection-card-title" class="pdf-selection-card-title" hidden>Translation</span>
+                                    <span class="pdf-selection-drag-handle" aria-hidden="true" title="Drag card">
+                                        <i class="bi bi-grip-vertical"></i>
+                                    </span>
                                     <button id="translate-pdf-selection" class="btn btn-primary pdf-selection-translate" type="button">
                                         <i class="bi bi-translate" aria-hidden="true"></i>
                                         <span>Translate</span>
@@ -1140,7 +1143,14 @@ GC releases managed memory. It does not close file handles, database connections
                 return rect.width > 0 && rect.height > 0 ? { text, rect } : null;
             }
 
-            function hidePdfSelectionPopover(clearBrowserSelection = false) {
+            function hidePdfSelectionPopover(clearBrowserSelection = false, force = false) {
+                if (isPdfSelectionCardExpanded() && !force) {
+                    if (clearBrowserSelection) {
+                        window.getSelection()?.removeAllRanges();
+                    }
+                    return;
+                }
+
                 activePdfSelectionText = '';
                 activePdfTranslationText = '';
                 activePdfSelectionRect = null;
@@ -1373,17 +1383,25 @@ GC releases managed memory. It does not close file handles, database connections
                 pdfSelectionPopover.style.top = `${Math.round(top)}px`;
             }
 
+            function finishPdfSelectionCardDrag(pointerId = pdfSelectionCardDrag?.pointerId, releaseCapture = true) {
+                if (!pdfSelectionCardDrag) {
+                    return;
+                }
+
+                if (releaseCapture && pointerId !== undefined && pdfSelectionActions.hasPointerCapture(pointerId)) {
+                    pdfSelectionActions.releasePointerCapture(pointerId);
+                }
+
+                pdfSelectionCardDrag = null;
+                savePdfSelectionCardLayout();
+            }
+
             function endPdfSelectionCardDrag(event) {
                 if (!pdfSelectionCardDrag || event.pointerId !== pdfSelectionCardDrag.pointerId) {
                     return;
                 }
 
-                if (pdfSelectionActions.hasPointerCapture(event.pointerId)) {
-                    pdfSelectionActions.releasePointerCapture(event.pointerId);
-                }
-
-                pdfSelectionCardDrag = null;
-                savePdfSelectionCardLayout();
+                finishPdfSelectionCardDrag(event.pointerId);
             }
 
             function positionPdfSelectionPopover() {
@@ -1600,14 +1618,89 @@ GC releases managed memory. It does not close file handles, database connections
 
             function workspaceResizeBounds() {
                 const minimum = 440;
-                const maximum = Math.max(minimum + 120, Math.floor(window.innerHeight * 0.78));
+                const maximum = Math.max(minimum + 260, Math.floor(window.innerHeight * 1.55));
                 return { minimum, maximum };
+            }
+
+            const workspaceResizeDragMultiplier = 0.98;
+            const workspaceResizeEdgeSize = 120;
+            const workspaceResizeEdgeMaxScrollPerSecond = 610;
+
+            function updateWorkspaceResizeValue(height) {
+                const { minimum, maximum } = workspaceResizeBounds();
+                workspaceResizeHandle.setAttribute('aria-valuemin', String(minimum));
+                workspaceResizeHandle.setAttribute('aria-valuemax', String(maximum));
+                workspaceResizeHandle.setAttribute('aria-valuenow', String(Math.round(height)));
             }
 
             function resizeWorkspace(height) {
                 const { minimum, maximum } = workspaceResizeBounds();
                 const nextHeight = Math.min(Math.max(Math.round(height), minimum), maximum);
                 workspaceGrid.style.height = `${nextHeight}px`;
+                updateWorkspaceResizeValue(nextHeight);
+                return nextHeight;
+            }
+
+            function workspaceResizeEdgeRatio(clientY) {
+                if (clientY > window.innerHeight - workspaceResizeEdgeSize) {
+                    return (workspaceResizeEdgeSize - (window.innerHeight - clientY)) / workspaceResizeEdgeSize;
+                }
+
+                if (clientY < workspaceResizeEdgeSize) {
+                    return -((workspaceResizeEdgeSize - clientY) / workspaceResizeEdgeSize);
+                }
+
+                return 0;
+            }
+
+            function resizeWorkspaceFromClientY(clientY) {
+                if (!workspaceResizeState) {
+                    return;
+                }
+
+                workspaceResizeState.lastClientY = clientY;
+                const dragDelta = window.scrollY + clientY - workspaceResizeState.startPageY;
+                resizeWorkspace(workspaceResizeState.startHeight + (dragDelta * workspaceResizeDragMultiplier));
+            }
+
+            function runWorkspaceResizeAutoScroll() {
+                if (!workspaceResizeState) {
+                    return;
+                }
+
+                const now = window.performance.now();
+                const elapsedSeconds = Math.min((now - workspaceResizeState.lastFrameTime) / 1000, 0.05);
+                workspaceResizeState.lastFrameTime = now;
+
+                const edgeRatio = workspaceResizeEdgeRatio(workspaceResizeState.lastClientY);
+                if (edgeRatio !== 0) {
+                    const scrollStep = edgeRatio * workspaceResizeEdgeMaxScrollPerSecond * elapsedSeconds;
+                    window.scrollBy(0, scrollStep);
+                    resizeWorkspaceFromClientY(workspaceResizeState.lastClientY);
+                }
+
+                workspaceResizeState.autoScrollFrame = window.requestAnimationFrame(runWorkspaceResizeAutoScroll);
+            }
+
+            function stopWorkspaceResizeAutoScroll() {
+                if (workspaceResizeState?.autoScrollFrame) {
+                    window.cancelAnimationFrame(workspaceResizeState.autoScrollFrame);
+                    workspaceResizeState.autoScrollFrame = null;
+                }
+            }
+
+            function finishWorkspaceResize(pointerId = workspaceResizeState?.pointerId, releaseCapture = true) {
+                if (!workspaceResizeState) {
+                    return;
+                }
+
+                if (releaseCapture && pointerId !== undefined && workspaceResizeHandle.hasPointerCapture(pointerId)) {
+                    workspaceResizeHandle.releasePointerCapture(pointerId);
+                }
+
+                stopWorkspaceResizeAutoScroll();
+                document.body.classList.remove('is-resizing-workspace');
+                workspaceResizeState = null;
             }
 
             function expandImportedWorkspace() {
@@ -1627,9 +1720,14 @@ GC releases managed memory. It does not close file handles, database connections
                 workspaceResizeState = {
                     pointerId: event.pointerId,
                     startHeight: workspaceGrid.getBoundingClientRect().height,
-                    startY: event.clientY
+                    startPageY: window.scrollY + event.clientY,
+                    lastClientY: event.clientY,
+                    lastFrameTime: window.performance.now(),
+                    autoScrollFrame: null
                 };
                 workspaceResizeHandle.setPointerCapture(event.pointerId);
+                document.body.classList.add('is-resizing-workspace');
+                workspaceResizeState.autoScrollFrame = window.requestAnimationFrame(runWorkspaceResizeAutoScroll);
             }
 
             function resizeWorkspaceFromPointer(event) {
@@ -1637,7 +1735,7 @@ GC releases managed memory. It does not close file handles, database connections
                     return;
                 }
 
-                resizeWorkspace(workspaceResizeState.startHeight + event.clientY - workspaceResizeState.startY);
+                resizeWorkspaceFromClientY(event.clientY);
             }
 
             function endWorkspaceResize(event) {
@@ -1645,8 +1743,7 @@ GC releases managed memory. It does not close file handles, database connections
                     return;
                 }
 
-                workspaceResizeHandle.releasePointerCapture(event.pointerId);
-                workspaceResizeState = null;
+                finishWorkspaceResize(event.pointerId);
             }
 
             function resizeWorkspaceFromKeyboard(event) {
@@ -1837,7 +1934,7 @@ GC releases managed memory. It does not close file handles, database connections
 
             fileViewButtons.forEach(button => {
                 button.addEventListener('click', () => {
-                    hidePdfSelectionPopover(true);
+                    hidePdfSelectionPopover(true, true);
                     setFileView(button.dataset.fileView);
                 });
             });
@@ -1846,7 +1943,14 @@ GC releases managed memory. It does not close file handles, database connections
             workspaceResizeHandle.addEventListener('pointermove', resizeWorkspaceFromPointer);
             workspaceResizeHandle.addEventListener('pointerup', endWorkspaceResize);
             workspaceResizeHandle.addEventListener('pointercancel', endWorkspaceResize);
+            workspaceResizeHandle.addEventListener('lostpointercapture', event => {
+                if (workspaceResizeState?.pointerId === event.pointerId) {
+                    finishWorkspaceResize(event.pointerId, false);
+                }
+            });
             workspaceResizeHandle.addEventListener('keydown', resizeWorkspaceFromKeyboard);
+            window.addEventListener('blur', () => finishWorkspaceResize());
+            updateWorkspaceResizeValue(workspaceGrid.getBoundingClientRect().height);
 
             historyToggle.addEventListener('click', () => setHistoryOpen(historyPanel.hidden));
             historyClose.addEventListener('click', () => setHistoryOpen(false));
@@ -1933,6 +2037,11 @@ GC releases managed memory. It does not close file handles, database connections
             pdfSelectionActions.addEventListener('pointermove', dragPdfSelectionCard);
             pdfSelectionActions.addEventListener('pointerup', endPdfSelectionCardDrag);
             pdfSelectionActions.addEventListener('pointercancel', endPdfSelectionCardDrag);
+            pdfSelectionActions.addEventListener('lostpointercapture', event => {
+                if (pdfSelectionCardDrag?.pointerId === event.pointerId) {
+                    finishPdfSelectionCardDrag(event.pointerId, false);
+                }
+            });
             copyPdfSelectionButton.addEventListener('click', async () => {
                 const copiedText = activePdfTranslationText || activePdfSelectionText;
                 const copied = await copyText(copiedText);
@@ -1940,7 +2049,7 @@ GC releases managed memory. It does not close file handles, database connections
                     ? activePdfTranslationText ? 'Translation copied.' : 'Selected text copied.'
                     : 'Copy is unavailable. Select the text and use Ctrl+C.';
             });
-            closePdfSelectionButton.addEventListener('click', () => hidePdfSelectionPopover(true));
+            closePdfSelectionButton.addEventListener('click', () => hidePdfSelectionPopover(true, true));
             if ('ResizeObserver' in window) {
                 new ResizeObserver(() => savePdfSelectionCardLayout()).observe(pdfSelectionPopover);
             }
@@ -1956,6 +2065,7 @@ GC releases managed memory. It does not close file handles, database connections
                 }
             });
             document.addEventListener('mouseup', finishPdfPointerSelection);
+            window.addEventListener('blur', () => finishPdfSelectionCardDrag());
             window.addEventListener('resize', () => {
                 if (isPdfSelectionCardExpanded()) {
                     clampPdfSelectionCardToViewport();
