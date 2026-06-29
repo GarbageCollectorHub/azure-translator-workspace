@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Options;
 using TranslatorAzure.Services.Analytics.Configuration;
 using TranslatorAzure.Services.Analytics.Events;
@@ -12,6 +14,9 @@ public sealed class AnalyticsTracker(
 {
     private const string VisitorCookieName = "translator_visitor_id";
     private const string LastVisitCookieName = "translator_last_visit_utc";
+    private const string IgnoreCookieName = "translator_analytics_ignore";
+    private const string IgnoreQueryName = "analytics_ignore";
+    private const string IgnoreHeaderName = "X-Analytics-Ignore";
 
     private readonly AnalyticsOptions _options = options.Value;
 
@@ -23,6 +28,12 @@ public sealed class AnalyticsTracker(
         }
 
         var now = DateTime.UtcNow;
+
+        if (ShouldIgnoreAnalytics(httpContext, now))
+        {
+            return;
+        }
+
         var visitorId = GetOrCreateVisitorId(httpContext, now);
 
         if (!ShouldTrackNewVisit(httpContext, now))
@@ -39,7 +50,10 @@ public sealed class AnalyticsTracker(
             CreatedAtUtc = now,
             IpAddress = GetClientIpAddress(httpContext),
             UserAgent = Truncate(httpContext.Request.Headers["User-Agent"].ToString(), 500),
-            AcceptLanguage = Truncate(httpContext.Request.Headers["Accept-Language"].ToString(), 200)
+            AcceptLanguage = Truncate(httpContext.Request.Headers["Accept-Language"].ToString(), 200),
+            Source = GetTrackingSource(httpContext),
+            PagePath = GetPagePath(httpContext),
+            Referrer = Truncate(httpContext.Request.Headers["Referer"].ToString(), 500)
         });
     }
 
@@ -69,14 +83,53 @@ public sealed class AnalyticsTracker(
             return;
         }
 
-        var visitorId = GetOrCreateVisitorId(httpContext, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+
+        if (ShouldIgnoreAnalytics(httpContext, now))
+        {
+            return;
+        }
+
+        var visitorId = GetOrCreateVisitorId(httpContext, now);
 
         queue.TryEnqueue(new AnalyticsEvent
         {
             VisitorId = visitorId,
             Type = eventType,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = now
         });
+    }
+
+    private bool ShouldIgnoreAnalytics(HttpContext httpContext, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(_options.IgnoreToken))
+        {
+            return false;
+        }
+
+        var ignoreToken = _options.IgnoreToken.Trim();
+
+        if (IsIgnoreTokenMatch(httpContext.Request.Query[IgnoreQueryName].FirstOrDefault(), ignoreToken))
+        {
+            SetIgnoreCookie(httpContext, now, ignoreToken);
+            return true;
+        }
+
+        if (IsIgnoreTokenMatch(httpContext.Request.Headers[IgnoreHeaderName].ToString(), ignoreToken))
+        {
+            return true;
+        }
+
+        return httpContext.Request.Cookies.TryGetValue(IgnoreCookieName, out var cookieValue)
+            && IsIgnoreTokenMatch(cookieValue, ignoreToken);
+    }
+
+    private void SetIgnoreCookie(HttpContext httpContext, DateTime now, string ignoreToken)
+    {
+        httpContext.Response.Cookies.Append(
+            IgnoreCookieName,
+            ignoreToken,
+            CreateCookieOptions(httpContext, now));
     }
 
     private string GetOrCreateVisitorId(HttpContext httpContext, DateTime now)
@@ -146,6 +199,58 @@ public sealed class AnalyticsTracker(
         }
 
         return httpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
+    private static string? GetTrackingSource(HttpContext httpContext)
+    {
+        foreach (var key in new[] { "source", "utm_source" })
+        {
+            if (httpContext.Request.Query.TryGetValue(key, out var values))
+            {
+                var value = NormalizeTrackingValue(values.FirstOrDefault(), 80);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetPagePath(HttpContext httpContext)
+    {
+        var path = string.Concat(httpContext.Request.PathBase, httpContext.Request.Path);
+        return Truncate(path, 300);
+    }
+
+    private static string? NormalizeTrackingValue(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var cleaned = new string(value
+            .Trim()
+            .Where(character => !char.IsControl(character))
+            .ToArray());
+
+        return Truncate(cleaned, maxLength);
+    }
+
+    private static bool IsIgnoreTokenMatch(string? value, string ignoreToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var valueBytes = Encoding.UTF8.GetBytes(value.Trim());
+        var tokenBytes = Encoding.UTF8.GetBytes(ignoreToken);
+
+        return valueBytes.Length == tokenBytes.Length
+            && CryptographicOperations.FixedTimeEquals(valueBytes, tokenBytes);
     }
 
     private static string? Truncate(string? value, int maxLength)

@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 
 namespace TranslatorAzure.Models.Analytics;
 
@@ -55,6 +55,18 @@ public sealed class VisitProfile
 
     [JsonProperty("acceptLanguage")]
     public string? AcceptLanguage { get; set; }
+
+    [JsonProperty("firstSource")]
+    public string? FirstSource { get; set; }
+
+    [JsonProperty("lastSource")]
+    public string? LastSource { get; set; }
+
+    [JsonProperty("lastPagePath")]
+    public string? LastPagePath { get; set; }
+
+    [JsonProperty("lastReferrer")]
+    public string? LastReferrer { get; set; }
 
     [JsonProperty("mainTranslationCount")]
     public int MainTranslationCount { get; set; }

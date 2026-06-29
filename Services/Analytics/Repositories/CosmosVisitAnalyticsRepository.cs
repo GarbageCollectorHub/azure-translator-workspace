@@ -1,4 +1,4 @@
-﻿using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos;
 using System.Net;
 using TranslatorAzure.Infrastructure.Cosmos;
 using TranslatorAzure.Models.Analytics;
@@ -45,6 +45,14 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
             profile.Browser = browserInfo.Browser ?? profile.Browser;
             profile.OperatingSystem = browserInfo.OperatingSystem ?? profile.OperatingSystem;
             profile.DeviceType = browserInfo.DeviceType ?? profile.DeviceType;
+            profile.LastPagePath = analyticsEvent.PagePath ?? profile.LastPagePath;
+            profile.LastReferrer = analyticsEvent.Referrer ?? profile.LastReferrer;
+
+            if (!string.IsNullOrWhiteSpace(analyticsEvent.Source))
+            {
+                profile.FirstSource ??= analyticsEvent.Source;
+                profile.LastSource = analyticsEvent.Source;
+            }
 
             var shouldLookupGeo = ShouldLookupGeo(profile, analyticsEvent.IpAddress);
 
@@ -79,6 +87,10 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
                 Browser = browserInfo.Browser,
                 OperatingSystem = browserInfo.OperatingSystem,
                 DeviceType = browserInfo.DeviceType,
+                FirstSource = analyticsEvent.Source,
+                LastSource = analyticsEvent.Source,
+                LastPagePath = analyticsEvent.PagePath,
+                LastReferrer = analyticsEvent.Referrer,
                 GeoStatus = shouldLookupGeo ? VisitProfile.GeoPending : VisitProfile.GeoUnavailable
             };
 

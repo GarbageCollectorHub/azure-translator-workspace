@@ -1,4 +1,4 @@
-﻿namespace TranslatorAzure.Services.Analytics.Events;
+namespace TranslatorAzure.Services.Analytics.Events;
 
 public sealed class AnalyticsEvent
 {
@@ -13,4 +13,10 @@ public sealed class AnalyticsEvent
     public string? UserAgent { get; init; }
 
     public string? AcceptLanguage { get; init; }
+
+    public string? Source { get; init; }
+
+    public string? PagePath { get; init; }
+
+    public string? Referrer { get; init; }
 }
