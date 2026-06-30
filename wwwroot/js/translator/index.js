@@ -45,6 +45,13 @@ const pageConfig = readTranslatorPageConfig();
         redoReplacement,
         resetSample,
         selectionStatus,
+        selectionTranslationPanel,
+        selectionTranslationHeader,
+        selectionTranslationTime,
+        selectionTranslationResult,
+        copySelectionTranslation,
+        resetSelectionTranslationPanel,
+        closeSelectionTranslationPanel,
         workspaceGrid,
         workspaceResizeHandle,
         historyPanel,
@@ -127,12 +134,20 @@ const pageConfig = readTranslatorPageConfig();
     let speechAudio = null;
     let speechObjectUrl = '';
     let activeSpeechButton = null;
+    let activeSelectionTranslationText = '';
+    let selectionTranslationPanelDrag = null;
 
     const replacementHistoryLimit = 20;
     const languagePreferencesKey = 'azure-translator-language-preferences-v1';
     const translationTextareaHeightKey = 'azure-translator-translation-textarea-height-v2';
     const translationTextareaMinimumHeight = 200;
     const translationTextareaMaximumHeight = 560;
+    const selectionTranslationPanelLayoutKey = 'azure-translator-selection-translation-panel-layout-v2';
+    const selectionTranslationPanelViewportMargin = 16;
+    const selectionTranslationPanelDefaultWidth = 520;
+    const selectionTranslationPanelDefaultHeight = 260;
+    const selectionTranslationPanelMinimumWidth = 360;
+    const selectionTranslationPanelMinimumHeight = 190;
     const pdfSelectionPointerTolerance = 48;
     const pdfSelectionCardLayoutKey = 'azure-translator-pdf-selection-card-layout-v1';
     const pdfSelectionCardViewportMargin = 16;
@@ -174,11 +189,205 @@ const pageConfig = readTranslatorPageConfig();
         workspaceResizeHandle
     });
 
-    function showToast(text) {
-        const toastEl = document.getElementById('translation-toast');
-        document.getElementById('toast-body').textContent = text;
-        document.getElementById('toast-time').textContent = new Date().toLocaleTimeString();
-        bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false }).show();
+    function clampSelectionTranslationPanelValue(value, minimum, maximum) {
+        return Math.min(Math.max(value, minimum), maximum);
+    }
+
+    function getStoredSelectionTranslationPanelLayout() {
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(selectionTranslationPanelLayoutKey) || 'null');
+            if (!saved || ![saved.leftRatio, saved.topRatio, saved.width, saved.height].every(Number.isFinite)) {
+                return null;
+            }
+
+            return saved;
+        } catch {
+            return null;
+        }
+    }
+
+    function saveSelectionTranslationPanelLayout() {
+        if (selectionTranslationPanel.hidden || window.innerWidth <= 900) {
+            return;
+        }
+
+        const rect = selectionTranslationPanel.getBoundingClientRect();
+        try {
+            sessionStorage.setItem(selectionTranslationPanelLayoutKey, JSON.stringify({
+                leftRatio: rect.left / window.innerWidth,
+                topRatio: rect.top / window.innerHeight,
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+            }));
+        } catch {
+            // Layout memory is optional; keep the panel usable without storage.
+        }
+    }
+
+    function applySelectionTranslationPanelLayout(layout) {
+        const maximumWidth = Math.max(
+            selectionTranslationPanelMinimumWidth,
+            window.innerWidth - (selectionTranslationPanelViewportMargin * 2));
+        const maximumHeight = Math.max(
+            selectionTranslationPanelMinimumHeight,
+            window.innerHeight - (selectionTranslationPanelViewportMargin * 2));
+        const width = clampSelectionTranslationPanelValue(
+            layout.width,
+            selectionTranslationPanelMinimumWidth,
+            maximumWidth);
+        const height = clampSelectionTranslationPanelValue(
+            layout.height,
+            selectionTranslationPanelMinimumHeight,
+            maximumHeight);
+        const left = clampSelectionTranslationPanelValue(
+            layout.leftRatio * window.innerWidth,
+            selectionTranslationPanelViewportMargin,
+            window.innerWidth - width - selectionTranslationPanelViewportMargin);
+        const top = clampSelectionTranslationPanelValue(
+            layout.topRatio * window.innerHeight,
+            selectionTranslationPanelViewportMargin,
+            window.innerHeight - height - selectionTranslationPanelViewportMargin);
+
+        selectionTranslationPanel.style.width = `${Math.round(width)}px`;
+        selectionTranslationPanel.style.height = `${Math.round(height)}px`;
+        selectionTranslationPanel.style.left = `${Math.round(left)}px`;
+        selectionTranslationPanel.style.top = `${Math.round(top)}px`;
+    }
+
+    function positionDefaultSelectionTranslationPanel() {
+        const maximumWidth = Math.max(
+            selectionTranslationPanelMinimumWidth,
+            window.innerWidth - (selectionTranslationPanelViewportMargin * 2));
+        const maximumHeight = Math.max(
+            selectionTranslationPanelMinimumHeight,
+            window.innerHeight - (selectionTranslationPanelViewportMargin * 2));
+        const width = Math.min(selectionTranslationPanelDefaultWidth, maximumWidth);
+        const height = Math.min(selectionTranslationPanelDefaultHeight, maximumHeight);
+        const left = clampSelectionTranslationPanelValue(
+            (window.innerWidth - width) / 2,
+            selectionTranslationPanelViewportMargin,
+            window.innerWidth - width - selectionTranslationPanelViewportMargin);
+        const top = clampSelectionTranslationPanelValue(
+            88,
+            selectionTranslationPanelViewportMargin,
+            window.innerHeight - height - selectionTranslationPanelViewportMargin);
+
+        selectionTranslationPanel.style.width = `${width}px`;
+        selectionTranslationPanel.style.height = `${height}px`;
+        selectionTranslationPanel.style.left = `${Math.round(left)}px`;
+        selectionTranslationPanel.style.top = `${Math.round(top)}px`;
+    }
+
+    function clampSelectionTranslationPanelToViewport() {
+        const rect = selectionTranslationPanel.getBoundingClientRect();
+        applySelectionTranslationPanelLayout({
+            leftRatio: rect.left / window.innerWidth,
+            topRatio: rect.top / window.innerHeight,
+            width: rect.width,
+            height: rect.height
+        });
+    }
+
+    function showSelectionTranslationPanel(translatedTextValue) {
+        activeSelectionTranslationText = translatedTextValue;
+        selectionTranslationResult.textContent = translatedTextValue;
+        selectionTranslationTime.textContent = new Date().toLocaleTimeString();
+        const wasHidden = selectionTranslationPanel.hidden;
+        selectionTranslationPanel.hidden = false;
+
+        window.requestAnimationFrame(() => {
+            if (window.innerWidth <= 900) {
+                return;
+            }
+
+            if (!wasHidden) {
+                clampSelectionTranslationPanelToViewport();
+                return;
+            }
+
+            const savedLayout = getStoredSelectionTranslationPanelLayout();
+            if (savedLayout) {
+                applySelectionTranslationPanelLayout(savedLayout);
+            } else {
+                positionDefaultSelectionTranslationPanel();
+            }
+        });
+    }
+
+    function hideSelectionTranslationPanel() {
+        selectionTranslationPanel.hidden = true;
+        selectionTranslationPanelDrag = null;
+    }
+
+    function resetSelectionTranslationPanelLayout() {
+        try {
+            sessionStorage.removeItem(selectionTranslationPanelLayoutKey);
+        } catch {
+            // Ignore storage failures; the visible panel can still be reset.
+        }
+
+        if (!selectionTranslationPanel.hidden && window.innerWidth > 900) {
+            positionDefaultSelectionTranslationPanel();
+        }
+    }
+
+    function beginSelectionTranslationPanelDrag(event) {
+        if (event.button !== 0 || event.target.closest('button') || window.innerWidth <= 900) {
+            return;
+        }
+
+        const rect = selectionTranslationPanel.getBoundingClientRect();
+        selectionTranslationPanelDrag = {
+            pointerId: event.pointerId,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startLeft: rect.left,
+            startTop: rect.top
+        };
+        selectionTranslationHeader.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    }
+
+    function dragSelectionTranslationPanel(event) {
+        if (!selectionTranslationPanelDrag || event.pointerId !== selectionTranslationPanelDrag.pointerId) {
+            return;
+        }
+
+        const rect = selectionTranslationPanel.getBoundingClientRect();
+        const left = clampSelectionTranslationPanelValue(
+            selectionTranslationPanelDrag.startLeft + event.clientX - selectionTranslationPanelDrag.startClientX,
+            selectionTranslationPanelViewportMargin,
+            window.innerWidth - rect.width - selectionTranslationPanelViewportMargin);
+        const top = clampSelectionTranslationPanelValue(
+            selectionTranslationPanelDrag.startTop + event.clientY - selectionTranslationPanelDrag.startClientY,
+            selectionTranslationPanelViewportMargin,
+            window.innerHeight - rect.height - selectionTranslationPanelViewportMargin);
+
+        selectionTranslationPanel.style.left = `${Math.round(left)}px`;
+        selectionTranslationPanel.style.top = `${Math.round(top)}px`;
+    }
+
+    function finishSelectionTranslationPanelDrag(
+        pointerId = selectionTranslationPanelDrag?.pointerId,
+        releaseCapture = true) {
+        if (!selectionTranslationPanelDrag) {
+            return;
+        }
+
+        if (releaseCapture && pointerId !== undefined && selectionTranslationHeader.hasPointerCapture(pointerId)) {
+            selectionTranslationHeader.releasePointerCapture(pointerId);
+        }
+
+        selectionTranslationPanelDrag = null;
+        saveSelectionTranslationPanelLayout();
+    }
+
+    function endSelectionTranslationPanelDrag(event) {
+        if (!selectionTranslationPanelDrag || event.pointerId !== selectionTranslationPanelDrag.pointerId) {
+            return;
+        }
+
+        finishSelectionTranslationPanelDrag(event.pointerId);
     }
 
     function showNotification(text, type = 'error') {
@@ -653,6 +862,7 @@ const pageConfig = readTranslatorPageConfig();
         recordReplacement(beforeText, '');
         resetSelectionState();
         updateSpeechButtons();
+        hideSelectionTranslationPanel();
         textArea.focus();
     }
 
@@ -703,8 +913,9 @@ const pageConfig = readTranslatorPageConfig();
                 }
                 syncCurrentFileSegment();
                 recordReplacement(beforeText, textArea.value);
+                hideSelectionTranslationPanel();
             } else {
-                showToast(output);
+                showSelectionTranslationPanel(output);
             }
 
             addHistory(selectedText, output, result.detectedLanguage);
@@ -1797,6 +2008,7 @@ const pageConfig = readTranslatorPageConfig();
         sampleText.value = defaultSampleText;
         clearCurrentReplacementHistory();
         resetSelectionState();
+        hideSelectionTranslationPanel();
         updateSpeechButtons();
     });
 
@@ -1877,8 +2089,16 @@ const pageConfig = readTranslatorPageConfig();
         }
     });
     document.addEventListener('mouseup', finishPdfPointerSelection);
-    window.addEventListener('blur', () => finishPdfSelectionCardDrag());
+    window.addEventListener('blur', () => {
+        finishSelectionTranslationPanelDrag();
+        finishPdfSelectionCardDrag();
+    });
     window.addEventListener('resize', () => {
+        if (!selectionTranslationPanel.hidden && window.innerWidth > 900) {
+            clampSelectionTranslationPanelToViewport();
+            saveSelectionTranslationPanelLayout();
+        }
+
         if (isPdfSelectionCardExpanded()) {
             clampPdfSelectionCardToViewport();
             savePdfSelectionCardLayout();
@@ -1897,6 +2117,25 @@ const pageConfig = readTranslatorPageConfig();
     });
 
     clearHistory.addEventListener('click', clearTranslationHistory);
+
+    selectionTranslationHeader.addEventListener('pointerdown', beginSelectionTranslationPanelDrag);
+    selectionTranslationHeader.addEventListener('pointermove', dragSelectionTranslationPanel);
+    selectionTranslationHeader.addEventListener('pointerup', endSelectionTranslationPanelDrag);
+    selectionTranslationHeader.addEventListener('pointercancel', endSelectionTranslationPanelDrag);
+    selectionTranslationHeader.addEventListener('lostpointercapture', event => {
+        if (selectionTranslationPanelDrag?.pointerId === event.pointerId) {
+            finishSelectionTranslationPanelDrag(event.pointerId, false);
+        }
+    });
+    if ('ResizeObserver' in window) {
+        new ResizeObserver(() => saveSelectionTranslationPanelLayout()).observe(selectionTranslationPanel);
+    }
+    closeSelectionTranslationPanel.addEventListener('click', hideSelectionTranslationPanel);
+    resetSelectionTranslationPanel.addEventListener('click', resetSelectionTranslationPanelLayout);
+    copySelectionTranslation.addEventListener('click', async () => {
+        const copied = await copyText(activeSelectionTranslationText);
+        setSelectionStatus(copied ? 'Translation copied.' : 'Copy is unavailable. Select the text and use Ctrl+C.');
+    });
 
     copyTranslation.addEventListener('click', () => {
         if (translatedText.value.trim()) {

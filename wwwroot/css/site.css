@@ -914,6 +914,7 @@ textarea:focus-visible {
 }
 
 .pdf-selection-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -926,7 +927,7 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-.pdf-selection-drag-handle {
+.pdf-selection-drag-cue {
   display: none;
 }
 
@@ -994,35 +995,36 @@ textarea:focus-visible {
 }
 
 .pdf-selection-popover.is-expanded .pdf-selection-actions {
-  min-height: 44px;
-  padding: 7px 8px;
+  min-height: 52px;
+  padding: 16px 8px 7px;
   border-bottom: 1px solid var(--border);
   cursor: grab;
   user-select: none;
 }
 
-.pdf-selection-popover.is-expanded .pdf-selection-drag-handle {
+.pdf-selection-popover.is-expanded .pdf-selection-drag-cue {
+  position: absolute;
+  top: 5px;
+  left: 50%;
   display: inline-flex;
-  width: 34px;
-  height: 30px;
   align-items: center;
   justify-content: center;
-  margin: 0 6px 0 -1px;
+  width: 68px;
+  height: 14px;
+  transform: translateX(-50%);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  color: #64748b;
+  border-radius: 999px;
+  color: var(--muted);
   background: var(--surface-subtle);
-  cursor: grab;
+  font-size: 0.9rem;
+  line-height: 1;
+  pointer-events: none;
 }
 
-.pdf-selection-popover.is-expanded .pdf-selection-actions:hover .pdf-selection-drag-handle {
-  border-color: #bfdbfe;
+.pdf-selection-popover.is-expanded .pdf-selection-actions:hover .pdf-selection-drag-cue {
+  border-color: rgba(43, 108, 224, 0.22);
   color: var(--primary);
-  background: #eff6ff;
-}
-
-.pdf-selection-popover.is-expanded .pdf-selection-drag-handle i {
-  font-size: 1.05rem;
+  background: var(--primary-soft);
 }
 
 .pdf-selection-popover.is-expanded .pdf-selection-actions:active {
@@ -1081,8 +1083,119 @@ textarea:focus-visible {
   box-shadow: 0 8px 20px rgba(23, 32, 51, 0.12);
 }
 
-.translation-toast-container {
+.selection-translation-panel {
+  position: fixed;
   z-index: 1100;
+  display: flex;
+  min-width: 360px;
+  min-height: 190px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 38px rgba(23, 32, 51, 0.16);
+}
+
+.selection-translation-panel[hidden] {
+  display: none !important;
+}
+
+.selection-translation-panel__header {
+  position: relative;
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  cursor: grab;
+  user-select: none;
+}
+
+.selection-translation-panel__header:active {
+  cursor: grabbing;
+}
+
+.selection-translation-panel__drag-cue {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 14px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+  font-size: 0.9rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.selection-translation-panel__header:hover .selection-translation-panel__drag-cue {
+  border-color: rgba(43, 108, 224, 0.22);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.selection-translation-panel__title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.selection-translation-panel__title i {
+  color: var(--primary);
+}
+
+.selection-translation-panel__time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.selection-translation-panel__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.selection-translation-panel__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 11px;
+}
+
+.selection-translation-panel__result {
+  margin: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 0.95rem;
+  line-height: 1.58;
+  white-space: pre-wrap;
 }
 
 .notification-toast-container {
@@ -1289,6 +1402,22 @@ body.is-resizing-workspace * {
   }
 
   .pdf-selection-popover.is-expanded .pdf-selection-actions {
+    cursor: default;
+  }
+
+  .selection-translation-panel {
+    right: 12px;
+    bottom: 12px;
+    left: 12px !important;
+    top: auto !important;
+    width: auto !important;
+    height: min(46dvh, 380px) !important;
+    min-width: 0;
+    min-height: 190px;
+    resize: none;
+  }
+
+  .selection-translation-panel__header {
     cursor: default;
   }
 

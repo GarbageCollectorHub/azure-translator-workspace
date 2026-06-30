@@ -327,8 +327,8 @@ GC releases managed memory. It does not close file handles, database connections
                             <div id="pdf-selection-popover" class="pdf-selection-popover" role="dialog" aria-label="Selected PDF text" hidden>
                                 <div class="pdf-selection-actions" role="toolbar" aria-label="Selected text actions">
                                     <span id="pdf-selection-card-title" class="pdf-selection-card-title" hidden>Translation</span>
-                                    <span class="pdf-selection-drag-handle" aria-hidden="true" title="Drag card">
-                                        <i class="bi bi-grip-vertical"></i>
+                                    <span class="pdf-selection-drag-cue" aria-hidden="true">
+                                        <i class="bi bi-grip-horizontal"></i>
                                     </span>
                                     <button id="translate-pdf-selection" class="btn btn-primary pdf-selection-translate" type="button">
                                         <i class="bi bi-translate" aria-hidden="true"></i>
@@ -379,15 +379,30 @@ GC releases managed memory. It does not close file handles, database connections
     </div>
 </section>
 
-<div class="translation-toast-container position-fixed top-0 start-50 translate-middle-x mt-4">
-    <div id="translation-toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="toast-header">
-            <span class="translate-icon me-2"><i class="bi bi-globe2"></i></span>
-            <strong class="me-auto">Translation</strong>
-            <small class="text-muted" id="toast-time"></small>
-            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+<div id="selection-translation-panel" class="selection-translation-panel" role="dialog" aria-label="Selection translation" hidden>
+    <div id="selection-translation-header" class="selection-translation-panel__header" title="Drag to move">
+        <span class="selection-translation-panel__drag-cue" aria-hidden="true">
+            <i class="bi bi-grip-horizontal"></i>
+        </span>
+        <span class="selection-translation-panel__title">
+            <i class="bi bi-translate" aria-hidden="true"></i>
+            <span>Selection translation</span>
+        </span>
+        <span class="selection-translation-panel__time" id="selection-translation-time"></span>
+        <div class="selection-translation-panel__actions">
+            <button id="copy-selection-translation" class="btn toolbar-icon-button" type="button" title="Copy translation" aria-label="Copy translation">
+                <i class="bi bi-copy" aria-hidden="true"></i>
+            </button>
+            <button id="reset-selection-translation-panel" class="btn toolbar-icon-button" type="button" title="Restore default panel size and position" aria-label="Restore default panel size and position">
+                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+            </button>
+            <button id="close-selection-translation-panel" class="btn toolbar-icon-button" type="button" title="Close translation" aria-label="Close translation">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
         </div>
-        <div class="toast-body" id="toast-body"></div>
+    </div>
+    <div class="selection-translation-panel__body">
+        <p id="selection-translation-result" class="selection-translation-panel__result" role="status"></p>
     </div>
 </div>
 
