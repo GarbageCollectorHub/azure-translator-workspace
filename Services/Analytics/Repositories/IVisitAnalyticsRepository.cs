@@ -1,4 +1,4 @@
-﻿using TranslatorAzure.Services.Analytics.Events;
+using TranslatorAzure.Services.Analytics.Events;
 using TranslatorAzure.Services.Analytics.GeoIp;
 using TranslatorAzure.Services.Analytics.UserAgent;
 
@@ -23,4 +23,9 @@ public interface IVisitAnalyticsRepository
     Task IncrementPdfSelectionTranslationCountAsync(string visitorId, CancellationToken cancellationToken);
 
     Task IncrementFileImportCountAsync(string visitorId, CancellationToken cancellationToken);
+
+    Task IncrementSpeechSynthesisUsageAsync(
+        string visitorId,
+        int characterCount,
+        CancellationToken cancellationToken);
 }

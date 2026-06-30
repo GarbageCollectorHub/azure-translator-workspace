@@ -14,6 +14,7 @@ const pageConfig = readTranslatorPageConfig();
         maxUploadBytes = 0,
         maxUploadSizeLabel = '',
         translateEndpoint = '',
+        speechEndpoint = '',
         fileImportEndpoint = '',
         pdfJsModuleUrl = '',
         pdfWorkerUrl = '',
@@ -30,6 +31,8 @@ const pageConfig = readTranslatorPageConfig();
         sourceLanguage,
         targetLanguage,
         sourceText,
+        speakSource,
+        speakTarget,
         sampleText,
         fileText,
         defaultSampleText,
@@ -112,12 +115,24 @@ const pageConfig = readTranslatorPageConfig();
     let activePdfSelectionRect = null;
     let activePdfTranslationText = '';
     let pdfSelectionCardDrag = null;
+    let currentSourceDetectedLanguage = detectedLanguage;
+    let currentTargetTranslationState = initialOutput
+        ? {
+            sourceText: initialInput,
+            sourceLanguage: sourceLanguage.value,
+            targetLanguage: targetLanguage.value,
+            translatedText: initialOutput
+        }
+        : null;
+    let speechAudio = null;
+    let speechObjectUrl = '';
+    let activeSpeechButton = null;
 
     const replacementHistoryLimit = 20;
     const languagePreferencesKey = 'azure-translator-language-preferences-v1';
-    const translationTextareaHeightKey = 'azure-translator-translation-textarea-height-v1';
-    const translationTextareaMinimumHeight = 172;
-    const translationTextareaMaximumHeight = 520;
+    const translationTextareaHeightKey = 'azure-translator-translation-textarea-height-v2';
+    const translationTextareaMinimumHeight = 200;
+    const translationTextareaMaximumHeight = 560;
     const pdfSelectionPointerTolerance = 48;
     const pdfSelectionCardLayoutKey = 'azure-translator-pdf-selection-card-layout-v1';
     const pdfSelectionCardViewportMargin = 16;
@@ -127,8 +142,9 @@ const pageConfig = readTranslatorPageConfig();
     const pdfSelectionCardMinimumHeight = 220;
     const replacementHistories = new Map();
 
-    const { requestTranslation } = createTranslatorApi({
+    const { requestTranslation, requestSpeech } = createTranslatorApi({
         translateEndpoint,
+        speechEndpoint,
         antiForgeryToken,
         sourceLanguage,
         targetLanguage
@@ -163,6 +179,210 @@ const pageConfig = readTranslatorPageConfig();
         document.getElementById('toast-body').textContent = text;
         document.getElementById('toast-time').textContent = new Date().toLocaleTimeString();
         bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false }).show();
+    }
+
+    function showNotification(text, type = 'error') {
+        const toastEl = document.getElementById('notification-toast');
+        const iconEl = document.getElementById('notification-toast-icon');
+        const titleEl = document.getElementById('notification-toast-title');
+
+        toastEl.classList.toggle('notification-toast--error', type === 'error');
+        toastEl.classList.toggle('notification-toast--warning', type === 'warning');
+        iconEl.innerHTML = type === 'warning'
+            ? '<i class="bi bi-exclamation-triangle"></i>'
+            : '<i class="bi bi-exclamation-circle"></i>';
+        titleEl.textContent = type === 'warning' ? 'Attention' : 'Audio';
+        document.getElementById('notification-toast-body').textContent = text;
+        document.getElementById('notification-toast-time').textContent = new Date().toLocaleTimeString();
+        bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: true, delay: 6000 }).show();
+    }
+
+    function setSpeechButtonIcon(button, iconClass) {
+        button.innerHTML = `<i class="bi ${iconClass}"></i>`;
+    }
+
+    function setSpeechButtonLoading(button, isLoading) {
+        button.disabled = isLoading;
+        button.innerHTML = isLoading
+            ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+            : '<i class="bi bi-volume-up"></i>';
+    }
+
+    function stopSpeech() {
+        if (speechAudio) {
+            speechAudio.pause();
+            speechAudio = null;
+        }
+
+        if (speechObjectUrl) {
+            URL.revokeObjectURL(speechObjectUrl);
+            speechObjectUrl = '';
+        }
+
+        if (activeSpeechButton) {
+            activeSpeechButton.classList.remove('is-playing');
+            setSpeechButtonIcon(activeSpeechButton, 'bi-volume-up');
+            activeSpeechButton = null;
+        }
+    }
+
+    function getLanguageLabel(select, languageCode) {
+        if (!languageCode) {
+            return 'this language';
+        }
+
+        const option = Array.from(select.options)
+            .find(item => item.value === languageCode);
+
+        return option?.textContent?.trim() || languageCode;
+    }
+
+    function resolveSpeechPayload(target) {
+        if (target === 'source') {
+            const language = sourceLanguage.value === 'auto'
+                ? currentSourceDetectedLanguage
+                : sourceLanguage.value;
+
+            return {
+                button: speakSource,
+                text: sourceText.value.trim(),
+                language,
+                languageLabel: getLanguageLabel(sourceLanguage, language),
+                missingLanguageMessage: 'Translate once before listening to auto-detected text.'
+            };
+        }
+
+        return {
+            button: speakTarget,
+            text: translatedText.value.trim(),
+            language: targetLanguage.value,
+            languageLabel: getLanguageLabel(targetLanguage, targetLanguage.value),
+            missingLanguageMessage: 'Choose a target language first.'
+        };
+    }
+
+    function isTargetTranslationCurrent() {
+        return currentTargetTranslationState !== null
+            && currentTargetTranslationState.sourceText === sourceText.value
+            && currentTargetTranslationState.sourceLanguage === sourceLanguage.value
+            && currentTargetTranslationState.targetLanguage === targetLanguage.value
+            && currentTargetTranslationState.translatedText === translatedText.value;
+    }
+
+    function isSpeechButtonLoading(button) {
+        return Boolean(button.querySelector('.spinner-border'));
+    }
+
+    function getSourceSpeechTitle(hasSpeechEndpoint, hasSourceText, sourceNeedsDetection) {
+        if (!hasSpeechEndpoint) {
+            return 'Audio is temporarily unavailable';
+        }
+
+        if (!hasSourceText) {
+            return 'Enter text to listen';
+        }
+
+        return sourceNeedsDetection
+            ? 'Translate once before listening to auto-detected text'
+            : 'Listen to source';
+    }
+
+    function getTargetSpeechTitle(hasSpeechEndpoint, hasTargetText, targetNeedsRefresh) {
+        if (!hasSpeechEndpoint) {
+            return 'Audio is temporarily unavailable';
+        }
+
+        if (!hasTargetText) {
+            return 'Translate text before listening';
+        }
+
+        return targetNeedsRefresh
+            ? 'Translate again before listening to this result'
+            : 'Listen to translation';
+    }
+
+    function updateSpeechButtons() {
+        const hasSpeechEndpoint = Boolean(speechEndpoint);
+        const hasSourceText = Boolean(sourceText.value.trim());
+        const hasTargetText = Boolean(translatedText.value.trim());
+        const sourceNeedsDetection = sourceLanguage.value === 'auto' && !currentSourceDetectedLanguage;
+        const targetNeedsRefresh = hasTargetText && !isTargetTranslationCurrent();
+
+        speakSource.disabled = isSpeechButtonLoading(speakSource);
+        speakTarget.disabled = isSpeechButtonLoading(speakTarget);
+
+        speakSource.title = getSourceSpeechTitle(hasSpeechEndpoint, hasSourceText, sourceNeedsDetection);
+        speakTarget.title = getTargetSpeechTitle(hasSpeechEndpoint, hasTargetText, targetNeedsRefresh);
+    }
+
+    function resetSourceDetectedLanguage() {
+        if (sourceLanguage.value === 'auto') {
+            currentSourceDetectedLanguage = null;
+        }
+    }
+
+    async function playSpeech(target) {
+        const { button, text, language, languageLabel, missingLanguageMessage } = resolveSpeechPayload(target);
+
+        if (speechAudio && activeSpeechButton === button && !speechAudio.paused) {
+            stopSpeech();
+            updateSpeechButtons();
+            return;
+        }
+
+        if (!speechEndpoint) {
+            showNotification('Audio is temporarily unavailable. Please try again later.');
+            return;
+        }
+
+        if (!text) {
+            showNotification(
+                target === 'source' ? 'Enter text to listen.' : 'Translate text before listening.',
+                'warning');
+            return;
+        }
+
+        if (!language || language === 'auto') {
+            showNotification(missingLanguageMessage, 'warning');
+            return;
+        }
+
+        if (target === 'target' && !isTargetTranslationCurrent()) {
+            showNotification('Translate again before listening to this result.', 'warning');
+            return;
+        }
+
+        stopSpeech();
+        setSpeechButtonLoading(button, true);
+
+        try {
+            const audioBlob = await requestSpeech(text, language);
+            speechObjectUrl = URL.createObjectURL(audioBlob);
+            speechAudio = new Audio(speechObjectUrl);
+            activeSpeechButton = button;
+            button.classList.add('is-playing');
+            setSpeechButtonIcon(button, 'bi-stop-fill');
+            button.disabled = false;
+
+            speechAudio.addEventListener('ended', () => {
+                stopSpeech();
+                updateSpeechButtons();
+            }, { once: true });
+
+            await speechAudio.play();
+        } catch (error) {
+            stopSpeech();
+            const message = error?.status === 404
+                ? `Audio is not supported for ${languageLabel} yet.`
+                : error instanceof Error ? error.message : 'Audio unavailable';
+
+            showNotification(message, error?.status === 404 ? 'warning' : 'error');
+            updateSpeechButtons();
+        } finally {
+            if (activeSpeechButton !== button) {
+                setSpeechButtonLoading(button, false);
+            }
+        }
     }
 
     function languageOptionExists(select, value) {
@@ -203,7 +423,7 @@ const pageConfig = readTranslatorPageConfig();
 
     function restoreLanguagePreferences() {
         const preferences = loadLanguagePreferences();
-        if (!preferences) {
+        if (!preferences || initialOutput) {
             return;
         }
 
@@ -432,6 +652,7 @@ const pageConfig = readTranslatorPageConfig();
         syncCurrentFileSegment();
         recordReplacement(beforeText, '');
         resetSelectionState();
+        updateSpeechButtons();
         textArea.focus();
     }
 
@@ -470,7 +691,6 @@ const pageConfig = readTranslatorPageConfig();
         try {
             const result = await requestTranslation(selectedText, 'selection');
             const output = result.text;
-
             if (replaceSelected.checked) {
                 const beforeText = textArea.value;
                 const leadingWhitespace = selection.match(/^\s*/)?.[0] ?? '';
@@ -488,6 +708,7 @@ const pageConfig = readTranslatorPageConfig();
             }
 
             addHistory(selectedText, output, result.detectedLanguage);
+            updateSpeechButtons();
             setSelectionStatus('');
         } catch (error) {
             setSelectionStatus(error instanceof Error ? error.message : 'Translation unavailable');
@@ -1196,6 +1417,7 @@ const pageConfig = readTranslatorPageConfig();
             updatePdfSelectionCopyButton();
             updatePdfSelectionExpandButton();
             addHistory(activePdfSelectionText, result.text, result.detectedLanguage);
+            updateSpeechButtons();
         } catch (error) {
             pdfSelectionResult.textContent = error instanceof Error ? error.message : 'Translation unavailable';
         } finally {
@@ -1524,15 +1746,26 @@ const pageConfig = readTranslatorPageConfig();
     saveLanguagePreferences();
     sourceLanguage.addEventListener('change', () => {
         syncLanguageTextDirection(sourceLanguage, form.elements.text);
+        resetSourceDetectedLanguage();
         saveLanguagePreferences();
+        updateSpeechButtons();
     });
     targetLanguage.addEventListener('change', () => {
         syncLanguageTextDirection(targetLanguage, translatedText);
         saveLanguagePreferences();
+        updateSpeechButtons();
     });
+    sourceText.addEventListener('input', () => {
+        resetSourceDetectedLanguage();
+        updateSpeechButtons();
+    });
+    speakSource.addEventListener('click', () => void playSpeech('source'));
+    speakTarget.addEventListener('click', () => void playSpeech('target'));
+    updateSpeechButtons();
 
     form?.addEventListener('submit', event => {
         saveLanguagePreferences();
+        stopSpeech();
         syncTranslationTextareaHeight();
         submitAction.value = event.submitter?.dataset.submitAction || submitAction.value || 'translate';
         translateButton.disabled = true;
@@ -1564,6 +1797,7 @@ const pageConfig = readTranslatorPageConfig();
         sampleText.value = defaultSampleText;
         clearCurrentReplacementHistory();
         resetSelectionState();
+        updateSpeechButtons();
     });
 
     fileInput.addEventListener('change', handleFileInputChange);

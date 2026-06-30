@@ -12,7 +12,8 @@
         ? "Hello, how are you today?"
         : Model.FormModel.Text;
 
-    string workspaceSampleText = @"Garbage collection in .NET
+    string workspaceSampleText = @"Test Example Text:
+Garbage collection in .NET
 
 Every object created in managed code is tracked by the CLR garbage collector. Most ordinary allocations begin on the small object heap; very large objects use the large object heap, and explicitly pinned allocations can use the pinned object heap. These are different allocation regions, not different ownership rules: the collector still determines whether each managed object can be reached by the application.
 
@@ -53,6 +54,7 @@ GC releases managed memory. It does not close file handles, database connections
         maxUploadBytes,
         maxUploadSizeLabel,
         translateEndpoint = Url.Action("Translate", "Translator"),
+        speechEndpoint = Url.Action("Speech", "Translator"),
         fileImportEndpoint = Url.Action("Import", "FileText"),
         pdfJsModuleUrl = Url.Content("~/lib/pdfjs/pdf.min.mjs"),
         pdfWorkerUrl = Url.Content("~/lib/pdfjs/pdf.worker.min.mjs"),
@@ -87,11 +89,23 @@ GC releases managed memory. It does not close file handles, database connections
                     }
                 </select>
 
-                <textarea
-                    id="source-text"
-                    name="text"
-                    class="form-control translator-textarea translator-textarea--source @(textDirectionFrom == "ltr" ? "ltr-text" : "rtl-text")"
-                    rows="7">@sourceText</textarea>
+                <div class="translation-textarea-shell translation-textarea-shell--source">
+                    <textarea
+                        id="source-text"
+                        name="text"
+                        class="form-control translator-textarea translator-textarea--source @(textDirectionFrom == "ltr" ? "ltr-text" : "rtl-text")"
+                        rows="7">@sourceText</textarea>
+                    <div class="translation-overlay-actions">
+                        <button
+                            id="speak-source"
+                            class="btn btn-outline-secondary icon-button speech-button"
+                            type="button"
+                            title="Listen to source"
+                            aria-label="Listen to source">
+                            <i class="bi bi-volume-up"></i>
+                        </button>
+                    </div>
+                </div>
 
                 <div class="translator-meta">
                     @if (Model.DetectedLanguage != null)
@@ -148,7 +162,7 @@ GC releases managed memory. It does not close file handles, database connections
                     }
                 </select>
 
-                <div class="translation-output">
+                <div class="translation-textarea-shell translation-textarea-shell--target">
                     <textarea
                         id="translated-text"
                         name="translation"
@@ -156,14 +170,24 @@ GC releases managed memory. It does not close file handles, database connections
                         rows="7"
                         placeholder="Translation will appear here"
                         readonly>@Model.Translation</textarea>
-                    <button
-                        id="copy-translation"
-                        class="btn btn-outline-secondary icon-button copy-button"
-                        type="button"
-                        title="Copy translation"
-                        aria-label="Copy translation">
-                        <i class="bi bi-copy"></i>
-                    </button>
+                    <div class="translation-overlay-actions">
+                        <button
+                            id="speak-target"
+                            class="btn btn-outline-secondary icon-button speech-button"
+                            type="button"
+                            title="Listen to translation"
+                            aria-label="Listen to translation">
+                            <i class="bi bi-volume-up"></i>
+                        </button>
+                        <button
+                            id="copy-translation"
+                            class="btn btn-outline-secondary icon-button copy-button"
+                            type="button"
+                            title="Copy translation"
+                            aria-label="Copy translation">
+                            <i class="bi bi-copy"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="translator-meta">
@@ -364,6 +388,20 @@ GC releases managed memory. It does not close file handles, database connections
             <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
         <div class="toast-body" id="toast-body"></div>
+    </div>
+</div>
+
+<div class="notification-toast-container position-fixed top-0 end-0 mt-4 me-4">
+    <div id="notification-toast" class="toast notification-toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <span id="notification-toast-icon" class="notification-toast__icon me-2">
+                <i class="bi bi-exclamation-circle"></i>
+            </span>
+            <strong class="me-auto" id="notification-toast-title">Notice</strong>
+            <small class="text-muted" id="notification-toast-time"></small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="notification-toast-body"></div>
     </div>
 </div>
 

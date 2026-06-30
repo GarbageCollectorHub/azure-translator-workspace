@@ -1,7 +1,9 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using TranslatorAzure.Infrastructure.RateLimiting;
+using TranslatorAzure.Models.Speech;
 using TranslatorAzure.Services.FileText;
+using TranslatorAzure.Services.Speech;
 using TranslatorAzure.Services.Translator;
 using TranslatorAzure.Services.Analytics;
 
@@ -10,12 +12,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
 builder.Configuration.AddJsonFile("azuresettings.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.Configure<TranslatorOptions>(builder.Configuration.GetSection("translator"));
 var rateLimitOptions = builder.Configuration
@@ -32,6 +36,10 @@ builder.Services
     .Validate(options => options.FileImportWindowSeconds > 0, "File import rate limit window must be positive.")
     .Validate(options => options.GlobalFileImportPermitLimit > 0, "Global file import rate limit must be positive.")
     .Validate(options => options.GlobalFileImportWindowSeconds > 0, "Global file import rate limit window must be positive.")
+    .Validate(options => options.SpeechSynthesisPermitLimit > 0, "Speech synthesis rate limit must be positive.")
+    .Validate(options => options.SpeechSynthesisWindowSeconds > 0, "Speech synthesis rate limit window must be positive.")
+    .Validate(options => options.GlobalSpeechSynthesisPermitLimit > 0, "Global speech synthesis rate limit must be positive.")
+    .Validate(options => options.GlobalSpeechSynthesisWindowSeconds > 0, "Global speech synthesis rate limit window must be positive.")
     .ValidateOnStart();
 builder.Services.AddRateLimiter(options =>
 {
@@ -74,6 +82,18 @@ builder.Services.AddRateLimiter(options =>
                         QueueLimit = 0,
                         Window = TimeSpan.FromSeconds(rateLimitOptions.GlobalFileImportWindowSeconds)
                     })
+                : RateLimitPartition.GetNoLimiter("not-rate-limited")),
+        PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            TranslatorRateLimitPartitionKeys.IsSpeechSynthesisRequest(httpContext)
+                ? RateLimitPartition.GetFixedWindowLimiter(
+                    TranslatorRateLimitPartitionKeys.GlobalSpeechSynthesis(httpContext),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = rateLimitOptions.GlobalSpeechSynthesisPermitLimit,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromSeconds(rateLimitOptions.GlobalSpeechSynthesisWindowSeconds)
+                    })
                 : RateLimitPartition.GetNoLimiter("not-rate-limited")));
 
     options.AddPolicy(TranslatorRateLimitPolicies.Translation, httpContext =>
@@ -97,8 +117,34 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 Window = TimeSpan.FromSeconds(rateLimitOptions.FileImportWindowSeconds)
             }));
+
+    options.AddPolicy(TranslatorRateLimitPolicies.SpeechSynthesis, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TranslatorRateLimitPartitionKeys.Client(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = rateLimitOptions.SpeechSynthesisPermitLimit,
+                QueueLimit = 0,
+                Window = TimeSpan.FromSeconds(rateLimitOptions.SpeechSynthesisWindowSeconds)
+            }));
 });
 builder.Services.AddScoped<ITranslatorService, AzureTranslatorService>();
+builder.Services
+    .AddOptions<SpeechSynthesisOptions>()
+    .Bind(builder.Configuration.GetSection(SpeechSynthesisOptions.SectionName))
+    .Validate(options => options.MaxTextLength > 0 && options.MaxTextLength <= SpeechSynthesisRequest.MaxTextLength,
+        $"The speech synthesis text limit must be between 1 and {SpeechSynthesisRequest.MaxTextLength}.")
+    .Validate(options => options.ClientMonthlyCharacterLimit >= 0, "The speech synthesis client monthly limit cannot be negative.")
+    .Validate(options => options.GlobalMonthlyCharacterLimit >= 0, "The speech synthesis global monthly limit cannot be negative.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<ISpeechSynthesisQuota, SpeechSynthesisQuota>();
+builder.Services.AddHttpClient<AzureSpeechSynthesisService>();
+builder.Services.AddTransient<ISpeechSynthesisService>(provider =>
+    provider.GetRequiredService<AzureSpeechSynthesisService>());
+builder.Services.AddTransient<ISpeechSynthesisWarmup>(provider =>
+    provider.GetRequiredService<AzureSpeechSynthesisService>());
+builder.Services.AddHostedService<SpeechSynthesisWarmupService>();
 builder.Services
     .AddOptions<FileTextImportOptions>()
     .Bind(builder.Configuration.GetSection(FileTextImportOptions.SectionName))

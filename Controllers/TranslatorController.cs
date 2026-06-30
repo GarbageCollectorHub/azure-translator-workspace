@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Models.Rest;
+using TranslatorAzure.Models.Speech;
 using TranslatorAzure.Models.Translator;
 using TranslatorAzure.Services.Analytics.Tracking;
+using TranslatorAzure.Services.Speech;
 using TranslatorAzure.Services.Translator;
 
 namespace TranslatorAzure.Controllers
@@ -16,17 +18,20 @@ namespace TranslatorAzure.Controllers
 
         private readonly ITranslatorService _translatorService;
         private readonly ILogger<TranslatorController> _logger;
+        private readonly IWebHostEnvironment _environment;
 
         private readonly IAnalyticsTracker _analyticsTracker;
 
         public TranslatorController(
             ITranslatorService translatorService,
             ILogger<TranslatorController> logger,
+            IWebHostEnvironment environment,
             IAnalyticsTracker analyticsTracker
             )
         {
             _translatorService = translatorService;
             _logger = logger;
+            _environment = environment;
             _analyticsTracker = analyticsTracker;
         }
 
@@ -179,6 +184,57 @@ namespace TranslatorAzure.Controllers
             }
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting(TranslatorRateLimitPolicies.SpeechSynthesis)]
+        public async Task<IActionResult> Speech(
+            [FromBody] SpeechSynthesisRequest request,
+            [FromServices] ISpeechSynthesisService speechSynthesisService,
+            CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(CreateSpeechErrorResponse(
+                    $"Enter up to {SpeechSynthesisRequest.MaxTextLength:N0} characters to listen.",
+                    StatusCodes.Status400BadRequest));
+            }
+
+            try
+            {
+                var result = await speechSynthesisService.SynthesizeAsync(
+                    request.Text,
+                    request.Language,
+                    cancellationToken);
+
+                Response.Headers.Append("X-Speech-Voice", result.VoiceName);
+                _analyticsTracker.TrackSpeechSynthesisCompleted(
+                    HttpContext,
+                    request.Text.Trim().Length);
+
+                return File(result.Audio, result.ContentType);
+            }
+            catch (SpeechSynthesisException ex)
+            {
+                if (!string.IsNullOrWhiteSpace(ex.DeveloperMessage))
+                {
+                    _logger.LogWarning("Azure Speech request rejected: {DeveloperMessage}", ex.DeveloperMessage);
+                }
+
+                var message = _environment.IsDevelopment() && !string.IsNullOrWhiteSpace(ex.DeveloperMessage)
+                    ? ex.DeveloperMessage
+                    : ex.Message;
+
+                return StatusCode(ex.StatusCode, CreateSpeechErrorResponse(message, ex.StatusCode));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Azure Speech failed to synthesize audio.");
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    CreateSpeechErrorResponse());
+            }
+        }
+
         private static void NormalizeForm(TranslatorFormModel formModel)
         {
             formModel.LanguageFrom = string.IsNullOrWhiteSpace(formModel.LanguageFrom)
@@ -291,6 +347,35 @@ namespace TranslatorAzure.Controllers
                     Service = "TranslatorAzure",
                     Method = "POST",
                     Action = "Text Translation",
+                    Time = DateTime.Now.Ticks,
+                    DataType = "error"
+                },
+                Data = new
+                {
+                    message
+                }
+            };
+        }
+
+        private static RestResponse CreateSpeechErrorResponse(
+            string? message = null,
+            int statusCode = StatusCodes.Status503ServiceUnavailable)
+        {
+            message ??= "Audio is temporarily unavailable. Please try again.";
+
+            return new RestResponse
+            {
+                Status = new()
+                {
+                    IsOk = false,
+                    Code = statusCode,
+                    Phrase = message
+                },
+                Meta = new()
+                {
+                    Service = "TranslatorAzure",
+                    Method = "POST",
+                    Action = "Speech Synthesis",
                     Time = DateTime.Now.Ticks,
                     DataType = "error"
                 },

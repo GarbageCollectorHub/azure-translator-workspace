@@ -21,4 +21,6 @@ public sealed class AnalyticsEvent
     public string? PagePath { get; init; }
 
     public string? Referrer { get; init; }
+
+    public int CharacterCount { get; init; }
 }

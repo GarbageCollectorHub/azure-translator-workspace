@@ -80,4 +80,10 @@ public sealed class VisitProfile
 
     [JsonProperty("fileImportCount")]
     public int FileImportCount { get; set; }
+
+    [JsonProperty("speechSynthesisCount")]
+    public int SpeechSynthesisCount { get; set; }
+
+    [JsonProperty("speechCharacterCount")]
+    public int SpeechCharacterCount { get; set; }
 }

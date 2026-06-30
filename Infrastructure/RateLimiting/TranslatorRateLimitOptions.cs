@@ -20,4 +20,12 @@ public sealed class TranslatorRateLimitOptions
     public int GlobalFileImportPermitLimit { get; init; } = 20;
 
     public int GlobalFileImportWindowSeconds { get; init; } = 60;
+
+    public int SpeechSynthesisPermitLimit { get; init; } = 12;
+
+    public int SpeechSynthesisWindowSeconds { get; init; } = 60;
+
+    public int GlobalSpeechSynthesisPermitLimit { get; init; } = 40;
+
+    public int GlobalSpeechSynthesisWindowSeconds { get; init; } = 60;
 }

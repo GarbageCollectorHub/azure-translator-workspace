@@ -1,4 +1,4 @@
-﻿namespace TranslatorAzure.Services.Analytics.Events;
+namespace TranslatorAzure.Services.Analytics.Events;
 
 public enum AnalyticsEventType
 {
@@ -6,5 +6,6 @@ public enum AnalyticsEventType
     MainTranslationCompleted,
     SelectionTranslationCompleted,
     PdfSelectionTranslationCompleted,
-    FileImported
+    FileImported,
+    SpeechSynthesisCompleted
 }

@@ -6,5 +6,14 @@
     "route": "/translate?api-version=3.0",
     "routeTransliterate": "/transliterate?api-version=3.0",
     "languagesUrl": "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0"
+  },
+  "SpeechSynthesis": {
+    "key": "<your-speech-key>",
+    "region": "<YOUR-SPEECH-RESOURCE-REGION>",
+    "endpoint": "https://<your-speech-resource-region>.api.cognitive.microsoft.com/",
+    "outputFormat": "audio-24khz-96kbitrate-mono-mp3",
+    "maxTextLength": 5000,
+    "clientMonthlyCharacterLimit": 50000,
+    "globalMonthlyCharacterLimit": 0
   }
 }

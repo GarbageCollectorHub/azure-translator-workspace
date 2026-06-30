@@ -58,6 +58,20 @@ public sealed class AnalyticsTrackerTests
         Assert.Empty(queue.Events);
     }
 
+    [Fact]
+    public void TrackSpeechSynthesisCompleted_TracksCharacterCount()
+    {
+        var queue = new TestAnalyticsQueue();
+        var tracker = CreateTracker(queue);
+        var context = new DefaultHttpContext();
+
+        tracker.TrackSpeechSynthesisCompleted(context, 42);
+
+        var analyticsEvent = Assert.Single(queue.Events);
+        Assert.Equal(AnalyticsEventType.SpeechSynthesisCompleted, analyticsEvent.Type);
+        Assert.Equal(42, analyticsEvent.CharacterCount);
+    }
+
     private static AnalyticsTracker CreateTracker(TestAnalyticsQueue queue, string? ignoreToken = null)
     {
         return new AnalyticsTracker(

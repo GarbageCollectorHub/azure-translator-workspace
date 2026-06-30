@@ -78,7 +78,12 @@ public sealed class AnalyticsTracker(
         TrackCounter(httpContext, AnalyticsEventType.FileImported);
     }
 
-    private void TrackCounter(HttpContext httpContext, AnalyticsEventType eventType)
+    public void TrackSpeechSynthesisCompleted(HttpContext httpContext, int characterCount)
+    {
+        TrackCounter(httpContext, AnalyticsEventType.SpeechSynthesisCompleted, Math.Max(0, characterCount));
+    }
+
+    private void TrackCounter(HttpContext httpContext, AnalyticsEventType eventType, int characterCount = 0)
     {
         if (!_options.Enabled)
         {
@@ -98,7 +103,8 @@ public sealed class AnalyticsTracker(
         {
             VisitorId = visitorId,
             Type = eventType,
-            CreatedAtUtc = now
+            CreatedAtUtc = now,
+            CharacterCount = characterCount
         });
     }
 

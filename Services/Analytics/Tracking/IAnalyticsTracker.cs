@@ -1,4 +1,4 @@
-﻿namespace TranslatorAzure.Services.Analytics.Tracking;
+namespace TranslatorAzure.Services.Analytics.Tracking;
 
 public interface IAnalyticsTracker
 {
@@ -9,4 +9,6 @@ public interface IAnalyticsTracker
     void TrackSelectionTranslationCompleted(HttpContext httpContext, bool isPdfSelection);
 
     void TrackFileImported(HttpContext httpContext);
+
+    void TrackSpeechSynthesisCompleted(HttpContext httpContext, int characterCount);
 }

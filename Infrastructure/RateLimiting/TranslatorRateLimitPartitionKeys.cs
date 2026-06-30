@@ -25,6 +25,13 @@ public static class TranslatorRateLimitPartitionKeys
             : "not-rate-limited";
     }
 
+    public static string GlobalSpeechSynthesis(HttpContext httpContext)
+    {
+        return IsSpeechSynthesisRequest(httpContext)
+            ? "global-speech-synthesis"
+            : "not-rate-limited";
+    }
+
     public static bool IsTranslationRequest(HttpContext httpContext)
     {
         if (!HttpMethods.IsPost(httpContext.Request.Method))
@@ -40,5 +47,11 @@ public static class TranslatorRateLimitPartitionKeys
     {
         return HttpMethods.IsPost(httpContext.Request.Method)
             && httpContext.Request.Path.Equals("/file-text/import", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsSpeechSynthesisRequest(HttpContext httpContext)
+    {
+        return HttpMethods.IsPost(httpContext.Request.Method)
+            && httpContext.Request.Path.Equals("/Translator/Speech", StringComparison.OrdinalIgnoreCase);
     }
 }

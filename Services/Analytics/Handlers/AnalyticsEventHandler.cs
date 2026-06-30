@@ -42,6 +42,13 @@ public sealed class AnalyticsEventHandler(
             case AnalyticsEventType.FileImported:
                 await repository.IncrementFileImportCountAsync(analyticsEvent.VisitorId, cancellationToken);
                 break;
+
+            case AnalyticsEventType.SpeechSynthesisCompleted:
+                await repository.IncrementSpeechSynthesisUsageAsync(
+                    analyticsEvent.VisitorId,
+                    analyticsEvent.CharacterCount,
+                    cancellationToken);
+                break;
         }
     }
 

@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using TranslatorAzure.Controllers;
 using TranslatorAzure.Models.Translator;
@@ -243,6 +246,7 @@ public sealed class TranslatorControllerTests
         return new TranslatorController(
             translator,
             NullLogger<TranslatorController>.Instance,
+            new TestWebHostEnvironment(),
             analyticsTracker ?? new TestAnalyticsTracker())
         {
             ControllerContext = new ControllerContext
@@ -250,5 +254,20 @@ public sealed class TranslatorControllerTests
                 HttpContext = new DefaultHttpContext()
             }
         };
+    }
+
+    private sealed class TestWebHostEnvironment : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "TranslatorAzure.Tests";
+
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+
+        public string WebRootPath { get; set; } = string.Empty;
+
+        public string EnvironmentName { get; set; } = Environments.Development;
+
+        public string ContentRootPath { get; set; } = string.Empty;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

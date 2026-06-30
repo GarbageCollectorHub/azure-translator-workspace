@@ -134,7 +134,7 @@ textarea:focus-visible {
 }
 
 .translation-surface {
-  --translator-textarea-height: clamp(172px, 20vh, 244px);
+  --translator-textarea-height: clamp(220px, 24vh, 300px);
 
   padding: clamp(16px, 1.4vw, 24px);
 }
@@ -183,10 +183,11 @@ textarea:focus-visible {
 }
 
 .translator-textarea {
-  min-height: 172px;
-  max-height: 520px;
+  min-height: 200px;
+  max-height: 560px;
   height: var(--translator-textarea-height);
   padding: 11px 12px;
+  scrollbar-gutter: stable;
   resize: none;
   line-height: 1.55;
 }
@@ -243,19 +244,31 @@ textarea:focus-visible {
   background: var(--primary-hover) !important;
 }
 
-.translation-output {
+.translation-textarea-shell {
   position: relative;
 }
 
-.translation-output .translator-textarea {
-  padding-right: 54px;
+.translation-textarea-shell .translator-textarea {
+  padding-right: 76px;
+}
+
+.translation-textarea-shell--target .translator-textarea {
+  padding-right: 118px;
   background: var(--surface-subtle);
 }
 
-.copy-button {
+.translation-overlay-actions {
   position: absolute;
   top: 10px;
-  right: 10px;
+  right: 28px;
+  display: flex;
+  gap: 6px;
+}
+
+.speech-button.is-playing {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--surface-selected);
 }
 
 .translator-meta {
@@ -1070,6 +1083,35 @@ textarea:focus-visible {
 
 .translation-toast-container {
   z-index: 1100;
+}
+
+.notification-toast-container {
+  z-index: 1110;
+}
+
+.notification-toast {
+  min-width: min(380px, calc(100vw - 32px));
+  border-left: 4px solid var(--primary);
+}
+
+.notification-toast--error {
+  border-left-color: var(--danger);
+}
+
+.notification-toast--warning {
+  border-left-color: #b7791f;
+}
+
+.notification-toast__icon {
+  color: var(--primary);
+}
+
+.notification-toast--error .notification-toast__icon {
+  color: var(--danger);
+}
+
+.notification-toast--warning .notification-toast__icon {
+  color: #b7791f;
 }
 
 .ltr-text {

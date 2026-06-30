@@ -171,6 +171,17 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
         return IncrementCounterAsync(visitorId, "/fileImportCount", cancellationToken);
     }
 
+    public Task IncrementSpeechSynthesisUsageAsync(
+        string visitorId,
+        int characterCount,
+        CancellationToken cancellationToken)
+    {
+        return IncrementSpeechSynthesisUsageCoreAsync(
+            visitorId,
+            Math.Max(0, characterCount),
+            cancellationToken);
+    }
+
     private async Task IncrementCounterAsync(
         string visitorId,
         string counterPath,
@@ -209,6 +220,53 @@ public sealed class CosmosVisitAnalyticsRepository(ICosmosContainerProvider cont
                     id,
                     new PartitionKey(id),
                     [PatchOperation.Increment(counterPath, 1)],
+                    cancellationToken: cancellationToken);
+            }
+        }
+    }
+
+    private async Task IncrementSpeechSynthesisUsageCoreAsync(
+        string visitorId,
+        int characterCount,
+        CancellationToken cancellationToken)
+    {
+        var id = CreateDocumentId(visitorId);
+        var container = await containerProvider.GetContainerAsync(cancellationToken);
+
+        try
+        {
+            await container.PatchItemAsync<VisitProfile>(
+                id,
+                new PartitionKey(id),
+                [
+                    PatchOperation.Increment("/speechSynthesisCount", 1),
+                    PatchOperation.Increment("/speechCharacterCount", characterCount),
+                    PatchOperation.Set("/lastSeenAtUtc", DateTime.UtcNow)
+                ],
+                cancellationToken: cancellationToken);
+        }
+        catch (CosmosException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            var profile = CreateEmptyProfile(visitorId, id, DateTime.UtcNow);
+            profile.SpeechSynthesisCount = 1;
+            profile.SpeechCharacterCount = characterCount;
+
+            try
+            {
+                await container.CreateItemAsync(
+                    profile,
+                    new PartitionKey(profile.Id),
+                    cancellationToken: cancellationToken);
+            }
+            catch (CosmosException conflictException) when (conflictException.StatusCode == HttpStatusCode.Conflict)
+            {
+                await container.PatchItemAsync<VisitProfile>(
+                    id,
+                    new PartitionKey(id),
+                    [
+                        PatchOperation.Increment("/speechSynthesisCount", 1),
+                        PatchOperation.Increment("/speechCharacterCount", characterCount)
+                    ],
                     cancellationToken: cancellationToken);
             }
         }

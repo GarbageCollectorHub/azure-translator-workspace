@@ -10,6 +10,8 @@ export function getTranslatorElements() {
         sourceLanguage: byId('source-language'),
         targetLanguage: byId('target-language'),
         sourceText: byId('source-text'),
+        speakSource: byId('speak-source'),
+        speakTarget: byId('speak-target'),
         sampleText,
         fileText: byId('file-text'),
         defaultSampleText: sampleText.value,

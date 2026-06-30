@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using TranslatorAzure.Services.Analytics.Tracking;
 
 namespace TranslatorAzure.Tests.TestSupport;
@@ -14,6 +14,10 @@ public sealed class TestAnalyticsTracker : IAnalyticsTracker
     public int PdfSelectionTranslationCompletedCalls { get; private set; }
 
     public int FileImportedCalls { get; private set; }
+
+    public int SpeechSynthesisCompletedCalls { get; private set; }
+
+    public int SpeechCharacterCount { get; private set; }
 
     public void TrackVisitOpened(HttpContext httpContext)
     {
@@ -39,5 +43,11 @@ public sealed class TestAnalyticsTracker : IAnalyticsTracker
     public void TrackFileImported(HttpContext httpContext)
     {
         FileImportedCalls++;
+    }
+
+    public void TrackSpeechSynthesisCompleted(HttpContext httpContext, int characterCount)
+    {
+        SpeechSynthesisCompletedCalls++;
+        SpeechCharacterCount += characterCount;
     }
 }
