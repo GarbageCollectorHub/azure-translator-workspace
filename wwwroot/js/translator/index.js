@@ -872,7 +872,8 @@ const pageConfig = readTranslatorPageConfig();
 
     async function translateSelection(force = false) {
         const textArea = activeTextArea();
-        if (!translateSelected.checked || (!force && document.activeElement !== textArea)) {
+        const shouldReplaceSelection = replaceSelected.checked;
+        if ((!translateSelected.checked && !shouldReplaceSelection) || (!force && document.activeElement !== textArea)) {
             return;
         }
 
@@ -890,7 +891,7 @@ const pageConfig = readTranslatorPageConfig();
             return;
         }
 
-        const selectionKey = `${activeWorkspace}:${start}:${end}:${selectedText}:${sourceLanguage.value}:${targetLanguage.value}:${replaceSelected.checked}`;
+        const selectionKey = `${activeWorkspace}:${start}:${end}:${selectedText}:${sourceLanguage.value}:${targetLanguage.value}:${shouldReplaceSelection}`;
         if (selectionKey === lastSelectionKey) {
             return;
         }
@@ -901,7 +902,7 @@ const pageConfig = readTranslatorPageConfig();
         try {
             const result = await requestTranslation(selectedText, 'selection');
             const output = result.text;
-            if (replaceSelected.checked) {
+            if (shouldReplaceSelection) {
                 const beforeText = textArea.value;
                 const leadingWhitespace = selection.match(/^\s*/)?.[0] ?? '';
                 const trailingWhitespace = selection.match(/\s*$/)?.[0] ?? '';
@@ -929,6 +930,11 @@ const pageConfig = readTranslatorPageConfig();
     function scheduleSelectionTranslation() {
         clearTimeout(selectionTimer);
         selectionTimer = window.setTimeout(() => translateSelection(), 650);
+    }
+
+    function handleSelectionModeChange() {
+        resetSelectionState();
+        hideSelectionTranslationPanel();
     }
 
     function resetSelectionState() {
@@ -2004,6 +2010,8 @@ const pageConfig = readTranslatorPageConfig();
 
     pasteText.addEventListener('click', pasteFromClipboard);
     clearText.addEventListener('click', clearCurrentText);
+    translateSelected.addEventListener('change', handleSelectionModeChange);
+    replaceSelected.addEventListener('change', handleSelectionModeChange);
     resetSample.addEventListener('click', () => {
         sampleText.value = defaultSampleText;
         clearCurrentReplacementHistory();

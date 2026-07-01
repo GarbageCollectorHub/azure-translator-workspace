@@ -216,6 +216,25 @@ GC releases managed memory. It does not close file handles, database connections
                 </div>
 
                 <div class="panel-controls" aria-label="Editor controls">
+                    <div class="toolbar-group toolbar-group--selection" aria-label="Selected text action">
+                        <span class="selection-mode-label">
+                            <span>Selected text</span>
+                        </span>
+                        <span class="visually-hidden" id="selection-mode-label">Selected text action</span>
+                        <div class="selection-mode-switch" role="radiogroup" aria-labelledby="selection-mode-label">
+                            <input class="selection-mode-input visually-hidden" type="radio" name="selection-mode" id="translate-selected" value="translate" checked>
+                            <input class="selection-mode-input visually-hidden" type="radio" name="selection-mode" id="replace-selected" value="replace">
+                            <span class="selection-mode-indicator" aria-hidden="true"></span>
+                            <label class="selection-mode-option" for="translate-selected" title="Show selected text translation in a floating panel">
+                                <i class="bi bi-translate" aria-hidden="true"></i>
+                                <span>Translate</span>
+                            </label>
+                            <label class="selection-mode-option" for="replace-selected" title="Replace selected text with translation">
+                                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                <span>Replace</span>
+                            </label>
+                        </div>
+                    </div>
                     <div class="toolbar-group">
                         <button id="paste-text" class="btn toolbar-command-button" type="button" title="Paste text from clipboard" aria-label="Paste text from clipboard">
                             <i class="bi bi-clipboard-plus"></i>
@@ -225,16 +244,6 @@ GC releases managed memory. It does not close file handles, database connections
                             <i class="bi bi-eraser"></i>
                             <span>Clear</span>
                         </button>
-                    </div>
-                    <div class="toolbar-group toolbar-group--selection">
-                        <label class="toolbar-toggle" for="translate-selected">
-                            <input type="checkbox" id="translate-selected" checked>
-                            <span>Translate selection</span>
-                        </label>
-                        <label class="toolbar-toggle" for="replace-selected">
-                            <input type="checkbox" id="replace-selected">
-                            <span>Replace selection</span>
-                        </label>
                     </div>
                     <div class="toolbar-group toolbar-group--actions" aria-label="Text actions">
                         <button id="select-all-text" class="btn toolbar-command-button" type="button" title="Select all text in the current section" aria-label="Select all text in the current section">
