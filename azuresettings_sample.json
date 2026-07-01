@@ -7,7 +7,21 @@
     "routeTransliterate": "/transliterate?api-version=3.0",
     "languagesUrl": "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0"
   },
+  "cosmos": {
+    "connectionString": "<your-cosmos-db-connection-string>",
+    "databaseName": "TranslatorAzure",
+    "containerName": "VisitProfiles"
+  },
+  "analytics": {
+    "enabled": true,
+    "ipHashSalt": "<your-private-ip-hash-salt>",
+    "visitCooldownMinutes": 30,
+    "visitorCookieDays": 180,
+    "geoIpEnabled": true,
+    "ignoreToken": "<your-analytics-ignore-token>"
+  },
   "SpeechSynthesis": {
+    "enabled": true,
     "key": "<your-speech-key>",
     "region": "<YOUR-SPEECH-RESOURCE-REGION>",
     "endpoint": "https://<your-speech-resource-region>.api.cognitive.microsoft.com/",
