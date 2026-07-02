@@ -32,6 +32,13 @@ public static class TranslatorRateLimitPartitionKeys
             : "not-rate-limited";
     }
 
+    public static string GlobalFeedback(HttpContext httpContext)
+    {
+        return IsFeedbackRequest(httpContext)
+            ? "global-feedback"
+            : "not-rate-limited";
+    }
+
     public static bool IsTranslationRequest(HttpContext httpContext)
     {
         if (!HttpMethods.IsPost(httpContext.Request.Method))
@@ -53,5 +60,11 @@ public static class TranslatorRateLimitPartitionKeys
     {
         return HttpMethods.IsPost(httpContext.Request.Method)
             && httpContext.Request.Path.Equals("/Translator/Speech", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsFeedbackRequest(HttpContext httpContext)
+    {
+        return HttpMethods.IsPost(httpContext.Request.Method)
+            && httpContext.Request.Path.Equals("/feedback/send", StringComparison.OrdinalIgnoreCase);
     }
 }

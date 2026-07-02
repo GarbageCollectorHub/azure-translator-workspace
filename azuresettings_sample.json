@@ -29,5 +29,21 @@
     "maxTextLength": 5000,
     "clientMonthlyCharacterLimit": 50000,
     "globalMonthlyCharacterLimit": 0
+  },
+  "Feedback": {
+    "_smtpNote": "Gmail default: smtp.gmail.com, port 587, useStartTls true. For another email provider, use its SMTP host, port, and TLS settings.",
+    "enabled": true,
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 587,
+    "useStartTls": true,
+    "senderEmail": "<your-pet-project-email@gmail.com>",
+    "senderName": "Azure Translator Workspace",
+    "recipientEmail": "<where-feedback-should-arrive@example.com>",
+    "smtpUserName": "<your-pet-project-email@gmail.com>",
+    "smtpPassword": "<your-gmail-app-password>",
+    "subject": "Azure Translator Workspace feedback",
+    "minMessageLength": 5,
+    "maxMessageLength": 2000,
+    "sendTimeoutSeconds": 10
   }
 }

@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+@inject Microsoft.Extensions.Options.IOptions<TranslatorAzure.Services.Feedback.FeedbackOptions> FeedbackOptions
+@{
+    var showFeedbackWidget = FeedbackOptions.Value.Enabled;
+}
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -29,8 +33,71 @@
         @RenderBody()
     </main>
 
+    @if (showFeedbackWidget)
+    {
+        <button id="feedback-open" class="feedback-fab" type="button" aria-haspopup="dialog" aria-controls="feedback-dialog">
+            <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+            <span>Feedback</span>
+        </button>
+
+        <div id="feedback-dialog" class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-title" hidden>
+            <div class="feedback-backdrop" data-feedback-close></div>
+            <section class="feedback-card" aria-describedby="feedback-description">
+                <div class="feedback-card__header">
+                    <div>
+                        <h2 id="feedback-title">Feedback</h2>
+                        <p id="feedback-description">Send a note to the developer.</p>
+                    </div>
+                    <button class="btn toolbar-icon-button" type="button" data-feedback-close title="Close feedback" aria-label="Close feedback">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <form id="feedback-form" class="feedback-form" action="@Url.Action("Send", "Feedback")" method="post" novalidate>
+                    @Html.AntiForgeryToken()
+                    <div class="feedback-field">
+                        <label for="feedback-name">
+                            <span>Name</span>
+                            <span class="feedback-field__optional">optional</span>
+                        </label>
+                        <input id="feedback-name" name="Name" class="form-control" type="text" maxlength="120" autocomplete="name" />
+                    </div>
+
+                    <div class="feedback-field">
+                        <label for="feedback-message">
+                            <span>Message</span>
+                            <span class="feedback-field__required" aria-hidden="true">*</span>
+                        </label>
+                        <textarea
+                            id="feedback-message"
+                            name="Message"
+                            class="form-control"
+                            rows="6"
+                            minlength="@FeedbackOptions.Value.MinMessageLength"
+                            maxlength="@FeedbackOptions.Value.MaxMessageLength"
+                            required></textarea>
+                        <p class="feedback-form__hint">Add contact details in the message if you want a reply.</p>
+                    </div>
+
+                    <div class="feedback-honeypot" aria-hidden="true">
+                        <label for="feedback-website">Website</label>
+                        <input id="feedback-website" name="Website" type="text" tabindex="-1" autocomplete="off" />
+                    </div>
+
+                    <p id="feedback-status" class="feedback-form__status" role="status"></p>
+
+                    <button id="feedback-submit" class="btn feedback-submit" type="submit">
+                        <i class="bi bi-send" aria-hidden="true"></i>
+                        <span>Send feedback</span>
+                    </button>
+                </form>
+            </section>
+        </div>
+    }
+
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/feedback.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

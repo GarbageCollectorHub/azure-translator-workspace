@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Models.Speech;
 using TranslatorAzure.Services.FileText;
+using TranslatorAzure.Services.Feedback;
 using TranslatorAzure.Services.Speech;
 using TranslatorAzure.Services.Translator;
 using TranslatorAzure.Services.Analytics;
@@ -40,6 +41,10 @@ builder.Services
     .Validate(options => options.SpeechSynthesisWindowSeconds > 0, "Speech synthesis rate limit window must be positive.")
     .Validate(options => options.GlobalSpeechSynthesisPermitLimit > 0, "Global speech synthesis rate limit must be positive.")
     .Validate(options => options.GlobalSpeechSynthesisWindowSeconds > 0, "Global speech synthesis rate limit window must be positive.")
+    .Validate(options => options.FeedbackPermitLimit > 0, "Feedback rate limit must be positive.")
+    .Validate(options => options.FeedbackWindowSeconds > 0, "Feedback rate limit window must be positive.")
+    .Validate(options => options.GlobalFeedbackPermitLimit > 0, "Global feedback rate limit must be positive.")
+    .Validate(options => options.GlobalFeedbackWindowSeconds > 0, "Global feedback rate limit window must be positive.")
     .ValidateOnStart();
 builder.Services.AddRateLimiter(options =>
 {
@@ -94,6 +99,18 @@ builder.Services.AddRateLimiter(options =>
                         QueueLimit = 0,
                         Window = TimeSpan.FromSeconds(rateLimitOptions.GlobalSpeechSynthesisWindowSeconds)
                     })
+                : RateLimitPartition.GetNoLimiter("not-rate-limited")),
+        PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            TranslatorRateLimitPartitionKeys.IsFeedbackRequest(httpContext)
+                ? RateLimitPartition.GetFixedWindowLimiter(
+                    TranslatorRateLimitPartitionKeys.GlobalFeedback(httpContext),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = rateLimitOptions.GlobalFeedbackPermitLimit,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromSeconds(rateLimitOptions.GlobalFeedbackWindowSeconds)
+                    })
                 : RateLimitPartition.GetNoLimiter("not-rate-limited")));
 
     options.AddPolicy(TranslatorRateLimitPolicies.Translation, httpContext =>
@@ -128,6 +145,17 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 Window = TimeSpan.FromSeconds(rateLimitOptions.SpeechSynthesisWindowSeconds)
             }));
+
+    options.AddPolicy(TranslatorRateLimitPolicies.Feedback, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TranslatorRateLimitPartitionKeys.Client(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = rateLimitOptions.FeedbackPermitLimit,
+                QueueLimit = 0,
+                Window = TimeSpan.FromSeconds(rateLimitOptions.FeedbackWindowSeconds)
+            }));
 });
 builder.Services.AddScoped<ITranslatorService, AzureTranslatorService>();
 builder.Services
@@ -161,6 +189,20 @@ builder.Services.AddSingleton<IFileTextExtractor, PlainTextExtractor>();
 builder.Services.AddSingleton<IFileTextExtractor, OpenXmlWordTextExtractor>();
 builder.Services.AddSingleton<IFileTextExtractor, PdfTextExtractor>();
 builder.Services.AddScoped<IFileTextImportService, FileTextImportService>();
+builder.Services
+    .AddOptions<FeedbackOptions>()
+    .Bind(builder.Configuration.GetSection(FeedbackOptions.SectionName))
+    .Validate(options => options.SmtpPort is > 0 and <= 65535, "Feedback SMTP port must be valid.")
+    .Validate(options => options.MinMessageLength is >= 1 and <= 200,
+        "Feedback minimum message length must be between 1 and 200 characters.")
+    .Validate(options => options.MaxMessageLength is >= 200 and <= 5000,
+        "Feedback message length limit must be between 200 and 5,000 characters.")
+    .Validate(options => options.MinMessageLength <= options.MaxMessageLength,
+        "Feedback minimum message length cannot exceed the maximum message length.")
+    .Validate(options => options.SendTimeoutSeconds is >= 1 and <= 30,
+        "Feedback send timeout must be between 1 and 30 seconds.")
+    .ValidateOnStart();
+builder.Services.AddScoped<IFeedbackEmailSender, SmtpFeedbackEmailSender>();
 
 // Analytics Services
 builder.Services.AddAnalytics(builder.Configuration);

@@ -28,4 +28,12 @@ public sealed class TranslatorRateLimitOptions
     public int GlobalSpeechSynthesisPermitLimit { get; init; } = 40;
 
     public int GlobalSpeechSynthesisWindowSeconds { get; init; } = 60;
+
+    public int FeedbackPermitLimit { get; init; } = 3;
+
+    public int FeedbackWindowSeconds { get; init; } = 600;
+
+    public int GlobalFeedbackPermitLimit { get; init; } = 20;
+
+    public int GlobalFeedbackWindowSeconds { get; init; } = 600;
 }
