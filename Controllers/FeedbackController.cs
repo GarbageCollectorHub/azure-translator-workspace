@@ -4,12 +4,14 @@ using Microsoft.Extensions.Options;
 using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Models.Feedback;
 using TranslatorAzure.Services.Feedback;
+using TranslatorAzure.Services.Feedback.Queue;
 
 namespace TranslatorAzure.Controllers;
 
 [Route("feedback")]
 public sealed class FeedbackController(
     IFeedbackEmailSender feedbackEmailSender,
+    IFeedbackQueue feedbackQueue,
     IOptions<FeedbackOptions> options,
     ILogger<FeedbackController> logger) : Controller
 {
@@ -18,15 +20,13 @@ public sealed class FeedbackController(
     [HttpPost("send")]
     [ValidateAntiForgeryToken]
     [EnableRateLimiting(TranslatorRateLimitPolicies.Feedback)]
-    public async Task<IActionResult> Send(
-        [FromForm] FeedbackRequest request,
-        CancellationToken cancellationToken)
+    public IActionResult Send([FromForm] FeedbackRequest request)
     {
         var feedbackOptions = options.Value;
 
         if (!string.IsNullOrWhiteSpace(request.Website))
         {
-            return Ok(CreateResponse("Thanks. Your message was sent."));
+            return Ok(CreateResponse("Thanks. Your message was received."));
         }
 
         var message = request.Message?.Trim() ?? string.Empty;
@@ -71,24 +71,15 @@ public sealed class FeedbackController(
             ReadHeader("User-Agent"),
             DateTimeOffset.UtcNow);
 
-        try
+        if (!feedbackQueue.TryEnqueue(feedbackMessage))
         {
-            await feedbackEmailSender.SendAsync(feedbackMessage, cancellationToken);
-            return Ok(CreateResponse("Thanks. Your message was sent."));
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex, "Feedback email is not configured.");
+            logger.LogWarning("Feedback form was submitted, but the background queue is full.");
             return StatusCode(
                 StatusCodes.Status503ServiceUnavailable,
                 CreateResponse("Feedback is temporarily unavailable. Please try again later.", false));
         }
-        catch (FeedbackSendException)
-        {
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                CreateResponse("Feedback is temporarily unavailable. Please try again later.", false));
-        }
+
+        return Ok(CreateResponse("Thanks. Your message was received."));
     }
 
     private string? ReadHeader(string headerName)

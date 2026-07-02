@@ -30,6 +30,8 @@ public sealed class FeedbackOptions
 
     public int SendTimeoutSeconds { get; init; } = 10;
 
+    public int QueueCapacity { get; init; } = 100;
+
     public string EffectiveRecipientEmail =>
         string.IsNullOrWhiteSpace(RecipientEmail) ? SenderEmail : RecipientEmail;
 

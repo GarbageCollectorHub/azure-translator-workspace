@@ -31,7 +31,6 @@
     "globalMonthlyCharacterLimit": 0
   },
   "Feedback": {
-    "_smtpNote": "Gmail default: smtp.gmail.com, port 587, useStartTls true. For another email provider, use its SMTP host, port, and TLS settings.",
     "enabled": true,
     "smtpHost": "smtp.gmail.com",
     "smtpPort": 587,
@@ -44,6 +43,7 @@
     "subject": "Azure Translator Workspace feedback",
     "minMessageLength": 5,
     "maxMessageLength": 2000,
-    "sendTimeoutSeconds": 10
+    "sendTimeoutSeconds": 10,
+    "queueCapacity": 100
   }
 }

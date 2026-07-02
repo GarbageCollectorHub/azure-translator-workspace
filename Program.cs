@@ -4,6 +4,8 @@ using TranslatorAzure.Infrastructure.RateLimiting;
 using TranslatorAzure.Models.Speech;
 using TranslatorAzure.Services.FileText;
 using TranslatorAzure.Services.Feedback;
+using TranslatorAzure.Services.Feedback.Background;
+using TranslatorAzure.Services.Feedback.Queue;
 using TranslatorAzure.Services.Speech;
 using TranslatorAzure.Services.Translator;
 using TranslatorAzure.Services.Analytics;
@@ -201,8 +203,12 @@ builder.Services
         "Feedback minimum message length cannot exceed the maximum message length.")
     .Validate(options => options.SendTimeoutSeconds is >= 1 and <= 30,
         "Feedback send timeout must be between 1 and 30 seconds.")
+    .Validate(options => options.QueueCapacity is >= 1 and <= 1000,
+        "Feedback queue capacity must be between 1 and 1,000.")
     .ValidateOnStart();
+builder.Services.AddSingleton<IFeedbackQueue, FeedbackQueue>();
 builder.Services.AddScoped<IFeedbackEmailSender, SmtpFeedbackEmailSender>();
+builder.Services.AddHostedService<FeedbackBackgroundService>();
 
 // Analytics Services
 builder.Services.AddAnalytics(builder.Configuration);
