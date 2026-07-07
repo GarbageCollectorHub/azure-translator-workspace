@@ -507,6 +507,7 @@ textarea:focus-visible {
   position: relative;
   z-index: 1;
   display: inline-flex;
+  height: 26px;
   min-height: 26px;
   align-items: center;
   justify-content: center;
@@ -521,7 +522,10 @@ textarea:focus-visible {
   font-weight: 650;
   line-height: 1.1;
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
 }
 
 .selection-mode-option:hover {
@@ -533,17 +537,31 @@ textarea:focus-visible {
   font-size: 0.8125rem;
 }
 
+
+
+
 .selection-mode-option--pause {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  justify-self: center;
-  color: #64748b;
+    width: 28px;
+    min-width: 28px;
+    height: 26px;
+    min-height: 26px;
+    padding: 0;
+    justify-self: center;
+    align-self: center;
+    color: #64748b;
 }
 
-.selection-mode-option--pause i {
-  font-size: 0.875rem;
-}
+    .selection-mode-option--pause i {
+        display: inline-flex;
+        width: 1em;
+        height: 1em;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+        line-height: 1;
+    }
+
+
 
 #replace-selected:checked ~ .selection-mode-indicator {
   transform: translateX(100%);
@@ -571,11 +589,9 @@ textarea:focus-visible {
 }
 
 #pause-selected:checked ~ label[for="pause-selected"] {
-  color: #334155;
-  background: #fff;
-  box-shadow:
-    inset 0 0 0 1px #cbd5e1,
-    0 1px 2px rgba(15, 23, 42, 0.08);
+  color: #35527c;
+  background: rgba(36, 87, 214, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 214, 0.22);
 }
 
 #pause-selected:checked ~ label[for="translate-selected"],
@@ -586,6 +602,10 @@ textarea:focus-visible {
 #pause-selected:checked ~ label[for="translate-selected"]:hover,
 #pause-selected:checked ~ label[for="replace-selected"]:hover {
   color: #64748b;
+}
+
+#pause-selected:checked ~ label[for="pause-selected"]:hover {
+  background: rgba(36, 87, 214, 0.11);
 }
 
 .selection-status {
@@ -925,14 +945,16 @@ textarea:focus-visible {
   background: var(--surface);
 }
 
-.file-segment-navigation {
+.file-segment-navigation,
+.pdf-page-navigation {
   flex: 0 0 auto;
   gap: 6px;
   color: var(--muted);
   font-size: 0.8125rem;
 }
 
-.file-segment-navigation .toolbar-icon-button {
+.file-segment-navigation .toolbar-icon-button,
+.pdf-page-navigation .toolbar-icon-button {
   width: 30px;
   height: 30px;
   min-width: 30px;
@@ -945,25 +967,30 @@ textarea:focus-visible {
 }
 
 .file-segment-navigation .toolbar-icon-button:not(:disabled):hover,
-.file-segment-navigation .toolbar-icon-button:not(:disabled):focus-visible {
+.file-segment-navigation .toolbar-icon-button:not(:disabled):focus-visible,
+.pdf-page-navigation .toolbar-icon-button:not(:disabled):hover,
+.pdf-page-navigation .toolbar-icon-button:not(:disabled):focus-visible {
   border-color: rgba(36, 87, 214, 0.36);
   color: var(--primary);
   background: var(--surface-selected);
 }
 
-.file-segment-navigation .toolbar-icon-button:disabled {
+.file-segment-navigation .toolbar-icon-button:disabled,
+.pdf-page-navigation .toolbar-icon-button:disabled {
   border-color: transparent;
   color: #c7d0de;
   background: transparent;
   cursor: default;
 }
 
-.file-segment-navigation .toolbar-icon-button i {
+.file-segment-navigation .toolbar-icon-button i,
+.pdf-page-navigation .toolbar-icon-button i {
   font-size: 0.875rem;
   line-height: 1;
 }
 
-#segment-position {
+#segment-position,
+#pdf-page-position {
   min-width: 104px;
   text-align: center;
 }
@@ -1038,14 +1065,7 @@ textarea:focus-visible {
 }
 
 .pdf-page-navigation {
-  gap: 4px;
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
-.pdf-page-navigation span {
-  min-width: 104px;
-  text-align: center;
+  flex: 0 0 auto;
 }
 
 .pdf-preview-status {

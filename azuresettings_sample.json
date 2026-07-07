@@ -7,6 +7,11 @@
     "routeTransliterate": "/transliterate?api-version=3.0",
     "languagesUrl": "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0"
   },
+  "FileText": {
+    "MaxUploadBytes": 10485760,
+    "MaxPdfPages": 200,
+    "MaxExtractedCharacters": 250000
+  },
   "cosmos": {
     "connectionString": "<your-cosmos-db-connection-string>",
     "databaseName": "TranslatorAzure",
