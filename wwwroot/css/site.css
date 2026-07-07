@@ -551,15 +551,15 @@ textarea:focus-visible {
     color: #64748b;
 }
 
-    .selection-mode-option--pause i {
-        display: inline-flex;
-        width: 1em;
-        height: 1em;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.875rem;
-        line-height: 1;
-    }
+.selection-mode-option--pause i {
+    display: inline-flex;
+    width: 1em;
+    height: 1em;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    line-height: 1;
+}
 
 
 
