@@ -224,6 +224,7 @@ GC releases managed memory. It does not close file handles, database connections
                         <div class="selection-mode-switch" role="radiogroup" aria-labelledby="selection-mode-label">
                             <input class="selection-mode-input visually-hidden" type="radio" name="selection-mode" id="translate-selected" value="translate" checked>
                             <input class="selection-mode-input visually-hidden" type="radio" name="selection-mode" id="replace-selected" value="replace">
+                            <input class="selection-mode-input visually-hidden" type="radio" name="selection-mode" id="pause-selected" value="pause" aria-label="Pause selected text actions">
                             <span class="selection-mode-indicator" aria-hidden="true"></span>
                             <label class="selection-mode-option" for="translate-selected" title="Show selected text translation in a floating panel">
                                 <i class="bi bi-translate" aria-hidden="true"></i>
@@ -232,6 +233,10 @@ GC releases managed memory. It does not close file handles, database connections
                             <label class="selection-mode-option" for="replace-selected" title="Replace selected text with translation">
                                 <i class="bi bi-pencil-square" aria-hidden="true"></i>
                                 <span>Replace</span>
+                            </label>
+                            <label class="selection-mode-option selection-mode-option--pause" for="pause-selected" title="Pause selected text actions">
+                                <i class="bi bi-stop-circle" aria-hidden="true"></i>
+                                <span class="visually-hidden">Pause selected text actions</span>
                             </label>
                         </div>
                     </div>
@@ -291,7 +296,15 @@ GC releases managed memory. It does not close file handles, database connections
 
                 <div id="file-editor" class="file-editor" hidden>
                     <div class="file-editor-header">
-                        <span id="imported-file-name" class="imported-file-name"></span>
+                        <div class="imported-file-summary">
+                            <span class="imported-file-icon" aria-hidden="true">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </span>
+                            <div class="imported-file-copy">
+                                <span id="imported-file-name" class="imported-file-name"></span>
+                                <span id="imported-file-meta" class="imported-file-meta"></span>
+                            </div>
+                        </div>
                         <div class="file-editor-actions">
                             <div id="file-view-toggle" class="file-view-toggle" role="tablist" aria-label="PDF view" hidden>
                                 <button class="file-view-button is-active" type="button" role="tab" aria-selected="true" data-file-view="text">Text</button>
@@ -306,8 +319,9 @@ GC releases managed memory. It does not close file handles, database connections
                                 <button id="next-segment" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Next section" aria-label="Next section">
                                     <i class="bi bi-chevron-right"></i>
                                 </button>
-                                <button id="clear-file" class="btn btn-outline-secondary toolbar-icon-button" type="button" title="Close imported file" aria-label="Close imported file">
-                                    <i class="bi bi-x-lg"></i>
+                                <button id="clear-file" class="btn file-close-button" type="button" title="Close imported file" aria-label="Close imported file">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                    <span>Close</span>
                                 </button>
                             </div>
                         </div>

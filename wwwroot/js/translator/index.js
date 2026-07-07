@@ -38,6 +38,7 @@ const pageConfig = readTranslatorPageConfig();
         defaultSampleText,
         translateSelected,
         replaceSelected,
+        pauseSelected,
         pasteText,
         clearText,
         selectAllText,
@@ -69,6 +70,7 @@ const pageConfig = readTranslatorPageConfig();
         fileEditor,
         fileImportMessage,
         importedFileName,
+        importedFileMeta,
         previousSegment,
         nextSegment,
         segmentPosition,
@@ -873,6 +875,12 @@ const pageConfig = readTranslatorPageConfig();
     async function translateSelection(force = false) {
         const textArea = activeTextArea();
         const shouldReplaceSelection = replaceSelected.checked;
+        if (pauseSelected.checked) {
+            resetSelectionState();
+            hideSelectionTranslationPanel();
+            return;
+        }
+
         if ((!translateSelected.checked && !shouldReplaceSelection) || (!force && document.activeElement !== textArea)) {
             return;
         }
@@ -929,6 +937,12 @@ const pageConfig = readTranslatorPageConfig();
 
     function scheduleSelectionTranslation() {
         clearTimeout(selectionTimer);
+        if (pauseSelected.checked) {
+            resetSelectionState();
+            hideSelectionTranslationPanel();
+            return;
+        }
+
         selectionTimer = window.setTimeout(() => translateSelection(), 650);
     }
 
@@ -1015,6 +1029,25 @@ const pageConfig = readTranslatorPageConfig();
     function getFileExtension(fileName) {
         const separator = fileName.lastIndexOf('.');
         return separator === -1 ? '' : fileName.substring(separator + 1).toLowerCase();
+    }
+
+    function formatCount(count, singular, plural = `${singular}s`) {
+        return `${count} ${count === 1 ? singular : plural}`;
+    }
+
+    function updateImportedFileSummary(fileName) {
+        const extension = getFileExtension(fileName).toUpperCase() || 'FILE';
+        const countLabel = Number.isInteger(importedPageCount)
+            ? formatCount(importedPageCount, 'page')
+            : formatCount(importedSegments.length, 'section');
+
+        importedFileName.textContent = fileName;
+        importedFileMeta.textContent = `${extension} - ${countLabel} - Editable text`;
+    }
+
+    function clearImportedFileSummary() {
+        importedFileName.textContent = '';
+        importedFileMeta.textContent = '';
     }
 
     function isPdfFile(file) {
@@ -1804,6 +1837,7 @@ const pageConfig = readTranslatorPageConfig();
         importedPageCount = null;
         currentSegmentIndex = 0;
         clearReplacementHistories();
+        clearImportedFileSummary();
         fileText.value = '';
         fileText.hidden = false;
         fileEditor.classList.remove('is-split-view');
@@ -1849,7 +1883,7 @@ const pageConfig = readTranslatorPageConfig();
             importedSegments = result.segments;
             importedPageCount = Number.isInteger(result.pageCount) ? result.pageCount : null;
             currentSegmentIndex = 0;
-            importedFileName.textContent = result.fileName || file.name;
+            updateImportedFileSummary(result.fileName || file.name);
             resetPdfPreview();
             importedPdfFile = isPdfFile(file) ? file : null;
             fileViewToggle.hidden = importedPdfFile === null;
@@ -2012,6 +2046,7 @@ const pageConfig = readTranslatorPageConfig();
     clearText.addEventListener('click', clearCurrentText);
     translateSelected.addEventListener('change', handleSelectionModeChange);
     replaceSelected.addEventListener('change', handleSelectionModeChange);
+    pauseSelected.addEventListener('change', handleSelectionModeChange);
     resetSample.addEventListener('click', () => {
         sampleText.value = defaultSampleText;
         clearCurrentReplacementHistory();
