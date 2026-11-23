@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace TranslatorAzure.Services.Feedback;
 
 public sealed class FeedbackOptions
@@ -8,6 +10,7 @@ public sealed class FeedbackOptions
 
     public string SmtpHost { get; init; } = "smtp.gmail.com";
 
+    [Range(1, 65535)]
     public int SmtpPort { get; init; } = 587;
 
     public bool UseStartTls { get; init; } = true;
@@ -24,12 +27,16 @@ public sealed class FeedbackOptions
 
     public string Subject { get; init; } = "Azure Translator Workspace feedback";
 
+    [Range(1, 200)]
     public int MinMessageLength { get; init; } = 5;
 
+    [Range(200, 5000)]
     public int MaxMessageLength { get; init; } = 2000;
 
+    [Range(1, 30)]
     public int SendTimeoutSeconds { get; init; } = 10;
 
+    [Range(1, 1000)]
     public int QueueCapacity { get; init; } = 100;
 
     public string EffectiveRecipientEmail =>

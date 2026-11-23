@@ -11,34 +11,6 @@ public static class TranslatorRateLimitPartitionKeys
             ?? "unknown-client";
     }
 
-    public static string GlobalTranslation(HttpContext httpContext)
-    {
-        return IsTranslationRequest(httpContext)
-            ? "global-translation"
-            : "not-rate-limited";
-    }
-
-    public static string GlobalFileImport(HttpContext httpContext)
-    {
-        return IsFileImportRequest(httpContext)
-            ? "global-file-import"
-            : "not-rate-limited";
-    }
-
-    public static string GlobalSpeechSynthesis(HttpContext httpContext)
-    {
-        return IsSpeechSynthesisRequest(httpContext)
-            ? "global-speech-synthesis"
-            : "not-rate-limited";
-    }
-
-    public static string GlobalFeedback(HttpContext httpContext)
-    {
-        return IsFeedbackRequest(httpContext)
-            ? "global-feedback"
-            : "not-rate-limited";
-    }
-
     public static bool IsTranslationRequest(HttpContext httpContext)
     {
         if (!HttpMethods.IsPost(httpContext.Request.Method))

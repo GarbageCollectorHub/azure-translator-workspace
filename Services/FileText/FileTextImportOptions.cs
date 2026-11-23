@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using TranslatorAzure.Models.Translator;
 
 namespace TranslatorAzure.Services.FileText;
@@ -11,12 +12,15 @@ public sealed class FileTextImportOptions
     public const int DefaultMaxPdfPages = 200;
     public const int DefaultMaxExtractedCharacters = 250_000;
 
+    [Range(1, DefaultMaxUploadBytes)]
     public int MaxUploadBytes { get; init; } = DefaultMaxUploadBytes;
 
     public int MaxSegmentCharacters => TranslationLimits.MaxInteractiveTextLength;
 
+    [Range(1, DefaultMaxPdfPages)]
     public int MaxPdfPages { get; init; } = DefaultMaxPdfPages;
 
+    [Range(1, DefaultMaxExtractedCharacters)]
     public int MaxExtractedCharacters { get; init; } = DefaultMaxExtractedCharacters;
 
     public string MaxUploadSizeLabel =>
